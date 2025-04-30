@@ -39,7 +39,24 @@ export const config = {
   bcryptSaltRounds: parseInt(process.env.BCRYPT_SALT_ROUNDS || '10', 10),
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173', // For CORS
   nodeEnv: process.env.NODE_ENV || 'development',
+
+  // --- Google OAuth ---
+  googleClientId: process.env.GOOGLE_CLIENT_ID || '',
+  googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+  googleCallbackUrl: process.env.GOOGLE_CALLBACK_URL || '',
+
+  // --- Session Secret ---
+  sessionSecret: process.env.SESSION_SECRET || 'fallback_session_secret',
 };
+
+// Add checks for Google creds in production
+if (config.nodeEnv === 'production' && (!config.googleClientId || !config.googleClientSecret)) {
+  console.error("FATAL ERROR: Google OAuth Client ID or Secret not defined in production environment.");
+  process.exit(1);
+}
+if (config.sessionSecret === 'fallback_session_secret' && config.nodeEnv === 'production') {
+  console.warn("WARNING: SESSION_SECRET is using a default fallback value in production!");
+}
 
 if (!config.databaseUrl && config.nodeEnv !== 'test') {
   console.error("FATAL ERROR: DATABASE_URL is not defined.");

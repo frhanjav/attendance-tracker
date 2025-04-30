@@ -24,6 +24,7 @@ model User {
   name      String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  emailVerified Boolean @default(false)
 
   streamsOwned    Stream[]           @relation("StreamOwner")
   streamMemberships StreamMembership[]

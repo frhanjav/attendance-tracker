@@ -2,6 +2,8 @@ import express, { Express, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { config } from './config';
 import apiRouter from './routes';
+import session from 'express-session'; // Import express-session
+import passport from './config/passport'; // Import configured passport
 import { errorHandler } from './middleware/error.middleware';
 import { AppError, NotFoundError } from './core/errors';
 
@@ -18,6 +20,25 @@ app.use(cors({
 // Body parser, reading data from body into req.body
 app.use(express.json({ limit: '10kb' })); // Limit request body size
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
+
+// --- Session Middleware (Required for Passport OAuth flow) ---
+app.use(session({
+  secret: config.sessionSecret, // Use the secret from config
+  resave: false, // Don't save session if unmodified
+  saveUninitialized: false, // Don't create session until something stored
+  cookie: {
+      secure: config.nodeEnv === 'production', // Use secure cookies in production (requires HTTPS)
+      httpOnly: true, // Prevent client-side JS access
+      maxAge: 1000 * 60 * 60 * 24 // Example: 1 day (adjust as needed)
+  },
+  // store: new PgSessionStore({ ... }) // Configure a production store later
+}));
+
+// --- Initialize Passport ---
+app.use(passport.initialize());
+// Optional: If using persistent login sessions via Passport (less common for SPA + JWT)
+// app.use(passport.session());
+
 
 // --- Routes ---
 app.use('/api/v1', apiRouter); // Prefix all API routes

@@ -1,16 +1,18 @@
 import React, { useState } from 'react'; // Import useState for error message
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { config } from '../config'; // Import config for API base URL
 import { z } from 'zod';
 import { useMutation } from '@tanstack/react-query';
 import { authService } from '../services/auth.service';
 import { useAuth } from '../hooks/useAuth';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
+import { GoogleIcon } from '../components/icons/GoogleIcon.svg'; // Example custom icon
 
 // Define Zod schema for login form validation
 const loginSchema = z.object({
-  email: z.string().email({ message: 'Invalid email address' }),
-  password: z.string().min(1, { message: 'Password is required' }),
+    email: z.string().email({ message: 'Invalid email address' }),
+    password: z.string().min(1, { message: 'Password is required' }),
 });
 
 type LoginFormInputs = z.infer<typeof loginSchema>;
@@ -20,9 +22,20 @@ const LoginPage: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const [errorMessage, setErrorMessage] = useState<string | null>(null); // State for error message
-    const from = location.state?.from?.pathname || "/dashboard"; // Redirect back or to dashboard
+    const from = location.state?.from?.pathname || '/dashboard'; // Redirect back or to dashboard
 
-    const { register, handleSubmit, formState: { errors } } = useForm<LoginFormInputs>({
+    const handleGoogleLogin = () => {
+        // Redirect the user directly to the backend's Google auth initiation route
+        // Use full URL because it's a direct browser navigation/redirect
+        const googleAuthUrl = `${config.apiBaseUrl}/auth/google`; // Construct backend URL
+        window.location.href = googleAuthUrl; // Redirect browser
+    };
+
+    const {
+        register,
+        handleSubmit,
+        formState: { errors },
+    } = useForm<LoginFormInputs>({
         resolver: zodResolver(loginSchema),
     });
 
@@ -48,10 +61,30 @@ const LoginPage: React.FC = () => {
         <div>
             <h2 className="text-2xl font-bold text-center mb-6">Login</h2>
             {errorMessage && ( // Display error message
-                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+                <div
+                    className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4"
+                    role="alert"
+                >
                     <span className="block sm:inline">{errorMessage}</span>
                 </div>
             )}
+
+            {/* Google Login Button */}
+            <button
+                type="button"
+                onClick={handleGoogleLogin}
+                className="w-full inline-flex items-center justify-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            >
+                {/* Add Google Icon here */}
+                <svg className="w-5 h-5 mr-2" /* ... Google SVG path ... */></svg>
+                Sign in with Google
+            </button>
+
+            {/* Optional Separator */}
+            <div className="my-6 flex items-center justify-center">
+                <span className="px-2 bg-white text-sm text-gray-500">OR</span>
+            </div>
+
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                 <div>
                     <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
@@ -64,10 +97,15 @@ const LoginPage: React.FC = () => {
                         className={`w-full px-3 py-2 border ${errors.email ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
                         disabled={mutation.isPending}
                     />
-                    {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email.message}</p>}
+                    {errors.email && (
+                        <p className="text-red-500 text-xs mt-1">{errors.email.message}</p>
+                    )}
                 </div>
                 <div>
-                    <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+                    <label
+                        htmlFor="password"
+                        className="block text-sm font-medium text-gray-700 mb-1"
+                    >
                         Password
                     </label>
                     <input
@@ -77,7 +115,9 @@ const LoginPage: React.FC = () => {
                         className={`w-full px-3 py-2 border ${errors.password ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
                         disabled={mutation.isPending}
                     />
-                    {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password.message}</p>}
+                    {errors.password && (
+                        <p className="text-red-500 text-xs mt-1">{errors.password.message}</p>
+                    )}
                 </div>
                 <div>
                     <button

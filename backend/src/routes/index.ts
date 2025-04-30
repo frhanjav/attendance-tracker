@@ -1,4 +1,8 @@
 import { Router } from 'express';
+import passport from '../config/passport'; // Import configured passport
+import jwt from 'jsonwebtoken'; // To generate JWT after successful OAuth
+import { config } from '../config'; // For JWT secret/expiry
+import { User } from '@prisma/client'; // Import User type
 import { userController } from '../domains/user/user.controller';
 import { streamController } from '../domains/stream/stream.controller'; // Assuming these exist
 import { timetableController } from '../domains/timetable/timetable.controller'; // Assuming these exist
@@ -36,6 +40,61 @@ router.get('/health', (req, res): void => {
 // --- Auth Routes ---
 router.post('/auth/signup', validateRequest(CreateUserSchema), userController.signup);
 router.post('/auth/login', validateRequest(LoginUserSchema), userController.login);
+
+// --- Google OAuth Routes ---
+
+// Route to initiate Google authentication
+// GET /api/v1/auth/google
+router.get('/auth/google',
+  passport.authenticate('google', {
+      scope: ['profile', 'email'], // Request profile and email scope
+      // session: false // Optional: If you *only* use JWT and don't need Passport session after OAuth
+  })
+);
+
+// Route Google redirects to after user authenticates with Google
+// GET /api/v1/auth/google/callback
+router.get('/auth/google/callback',
+  passport.authenticate('google', {
+      // session: false, // Match session setting above
+      failureRedirect: `${config.frontendUrl}/login?error=google-auth-failed`, // Redirect on failure
+      // failureMessage: true // Optional: include failure messages
+  }),
+  (req, res) => {
+      // --- Successful authentication ---
+      // 'req.user' is populated by Passport's verify callback via serializeUser/deserializeUser
+      // or directly from the verify callback if session: false is used consistently.
+      console.log('[Auth Callback] Google Auth Successful. User:', req.user);
+
+      if (!req.user) {
+          // Should not happen if passport.authenticate succeeded without error/redirect
+          console.error('[Auth Callback] req.user not found after successful Google auth!');
+          return res.redirect(`${config.frontendUrl}/login?error=auth-failed`);
+      }
+
+      // --- Generate YOUR application's JWT ---
+      const user = req.user as User; // Cast req.user to your User type
+      const payload = { id: user.id };
+      const token = jwt.sign(payload, config.jwtSecret, { expiresIn: config.jwtExpiresInSeconds }); // Use seconds
+
+      // --- Redirect user back to frontend with token ---
+      // Option 1: Query Parameter (Simpler, less secure - token visible in URL/history)
+      // res.redirect(`${config.frontendUrl}/auth/callback?token=${token}`);
+
+      // Option 2: Cookie (More secure - HttpOnly)
+      // Requires cookie-parser middleware: npm install cookie-parser @types/cookie-parser
+      // app.use(cookieParser()); // Add in server.ts
+      res.cookie('authToken', token, {
+           httpOnly: true, // Cannot be accessed by client-side JS
+           secure: config.nodeEnv === 'production', // Only send over HTTPS in production
+           maxAge: 1000 * 60 * 60 * 24 * 7, // Example: 7 days (match JWT expiry?)
+           // sameSite: 'lax' // Or 'strict' or 'none' (if needed for cross-site)
+      });
+      res.redirect(`${config.frontendUrl}/dashboard`); // Redirect to dashboard after setting cookie
+
+      // Option 3: Post message (for SPAs if popup window used - more complex)
+  }
+);
 
 // --- Protected Routes (Require Authentication) ---
 router.use(protect); // Apply auth middleware to all subsequent routes

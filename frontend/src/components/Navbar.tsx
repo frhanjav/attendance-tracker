@@ -41,28 +41,15 @@ const Navbar: React.FC = () => {
             {user ? (
               // --- Logged In State ---
               <div className="flex items-center space-x-4">
-                <Link to="/dashboard">
-                    {/* Use Button with variant="link" for text-like links */}
-                    <Button variant="link" className="hidden sm:block text-sm font-medium text-gray-600 hover:text-blue-600 px-0">
-                        Dashboard
-                    </Button>
-                </Link>
+                
 
                 {/* User Dropdown using shadcn/ui components */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    {/* Use Button with variant="ghost" for the trigger */}
-                    <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-                       {/* You can use shadcn Avatar component here if added */}
-                       {/* <Avatar className="h-8 w-8"> */}
-                       {/*   <AvatarImage src={user.avatarUrl || undefined} alt={user.name || 'User'} /> */}
-                       {/*   <AvatarFallback>{user.name ? user.name.charAt(0).toUpperCase() : <User size={16}/>}</AvatarFallback> */}
-                       {/* </Avatar> */}
-
-                       {/* Fallback if not using Avatar component */}
-                        <span className="flex items-center justify-center h-full w-full rounded-full bg-blue-100 text-blue-600 font-semibold text-xs">
-                            {user.name ? user.name.charAt(0).toUpperCase() : <User size={16}/>}
-                        </span>
+                  <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+                       <div className="flex items-center justify-center h-full w-full rounded-full bg-gray-100 text-gray-600">
+                           <User className="h-4 w-4" /> {/* Use Lucide User icon */}
+                       </div>
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent className="w-56" align="end" forceMount>
