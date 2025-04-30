@@ -31,6 +31,18 @@ export const BulkAttendanceSchema = z.object({
 });
 export type BulkAttendanceInput = z.infer<typeof BulkAttendanceSchema>['body'];
 
+// --- NEW: Schema for Cancel Class Request Body ---
+export const CancelClassSchema = z.object({
+    body: z.object({
+        streamId: z.string().cuid({ message: "Stream ID is required" }),
+        classDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, { message: "Invalid date format (YYYY-MM-DD)" }),
+        subjectName: z.string().min(1, { message: "Subject name is required" }),
+        // Optional: Include startTime if needed to distinguish multiple classes of the same subject on the same day
+        startTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, { message: 'Invalid time format (HH:MM)' }).optional().nullable(),
+    })
+});
+export type CancelClassInput = z.infer<typeof CancelClassSchema>['body'];
+// --- End Cancel Class Schema ---
 
 // Output DTO for a single attendance record
 export const AttendanceRecordOutputSchema = z.object({

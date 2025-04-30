@@ -1,7 +1,14 @@
 import { Request, Response, NextFunction } from 'express';
 import { attendanceService } from './attendance.service';
-import { MarkAttendanceInput, BulkAttendanceInput } from './attendance.dto';
+import { MarkAttendanceInput, BulkAttendanceInput, CancelClassInput, CancelClassSchema } from './attendance.dto';
 import { ParsedQs } from 'qs';
+import { z } from 'zod'; // Import Zod if needed for inline validation (though schema is better)
+
+// Define schema for weekly view query params if not using validateRequest middleware for it
+const weeklyViewQuerySchema = z.object({
+    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
 
 export const attendanceController = {
     async handleMarkAttendance(req: Request<{}, {}, MarkAttendanceInput>, res: Response, next: NextFunction) {
@@ -9,33 +16,6 @@ export const attendanceController = {
             const userId = req.user!.id;
             const record = await attendanceService.markDailyAttendance(req.body, userId);
             res.status(200).json({ status: 'success', data: { record } }); // 200 OK for upsert
-        } catch (error) {
-            next(error);
-        }
-    },
-
-    async handleGetCalendar(req: Request<{}, {}, {}, { streamId?: string, startDate?: string, endDate?: string } & ParsedQs>, res: Response, next: NextFunction): Promise<void> {
-        try {
-            const userId = req.user!.id;
-            const { streamId, startDate, endDate } = req.query;
-
-            // Basic validation (use Zod middleware for robustness)
-            if (!streamId || typeof streamId !== 'string') {
-                res.status(400).json({ status: 'fail', message: 'Missing streamId query parameter' });
-                return;
-            }
-            if (!startDate || typeof startDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
-                res.status(400).json({ status: 'fail', message: 'Invalid or missing startDate (YYYY-MM-DD)' });
-                return;
-            }
-            if (!endDate || typeof endDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)){
-                res.status(400).json({ status: 'fail', message: 'Invalid or missing endDate (YYYY-MM-DD)' });
-                return;
-            } 
-
-
-            const events = await attendanceService.getCalendarData(streamId, startDate, endDate, userId);
-            res.status(200).json({ status: 'success', results: events.length, data: { events } });
         } catch (error) {
             next(error);
         }
@@ -75,6 +55,38 @@ export const attendanceController = {
                 subjectName
             );
             res.status(200).json({ status: 'success', results: records.length, data: { records } });
+        } catch (error) {
+            next(error);
+        }
+    },
+
+    // --- NEW: Cancel Class Globally (Admin) ---
+    async handleCancelClassGlobally(req: Request<{}, {}, CancelClassInput>, res: Response, next: NextFunction) {
+        try {
+            const adminUserId = req.user!.id; // Assuming admin is logged in
+            // Input validation is handled by validateRequest(CancelClassSchema) middleware
+            const result = await attendanceService.cancelClassGlobally(req.body, adminUserId);
+            res.status(200).json({ status: 'success', data: result });
+        } catch (error) {
+            next(error);
+        }
+    },
+
+    // --- NEW: Get Weekly Attendance View (Student/Member) ---
+    async handleGetWeeklyAttendanceView(
+        // Define Params and Query types based on route and expected query params
+        req: Request<{ streamId: string }, {}, {}, { startDate?: string, endDate?: string } & ParsedQs>,
+        res: Response,
+        next: NextFunction
+    ) {
+        try {
+            const userId = req.user!.id; // Logged-in user requesting their view
+            const streamId = req.params.streamId;
+            // Validation of query params is handled by validateRequest middleware
+            const { startDate, endDate } = req.query as { startDate: string, endDate: string }; // Cast after validation
+
+            const weeklyView = await attendanceService.getWeeklyAttendanceView(streamId, startDate, endDate, userId);
+            res.status(200).json({ status: 'success', data: { attendanceView: weeklyView } });
         } catch (error) {
             next(error);
         }

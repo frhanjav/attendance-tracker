@@ -6,23 +6,23 @@ import { UserOutput } from '../user/user.dto'; // Assuming UserOutput type exist
 
 // --- Update StreamDetailedOutput DTO ---
 
-// Helper to map Prisma Stream to StreamBasicOutput DTO
-const mapStreamToBasicOutput = (stream: any): StreamBasicOutput => ({
-    id: stream.id,
-    name: stream.name,
-    streamCode: stream.streamCode,
-    ownerId: stream.ownerId,
+// Helper to map Prisma Stream (or parts) to StreamBasicOutput DTO
+const mapStreamToBasicOutput = (stream: Partial<Stream>): StreamBasicOutput => ({
+    id: stream.id!, // Assume ID is always present
+    name: stream.name!,
+    streamCode: stream.streamCode!,
+    ownerId: stream.ownerId!,
 });
 
-// Helper to map Prisma StreamMembership to StreamMemberOutput DTO
-const mapMembershipToOutput = (membership: any): StreamMemberOutput => ({
+// Helper to map repository's MembershipWithSelectedUser to StreamMemberOutput DTO
+const mapMembershipToOutput = (membership: StreamMemberWithSelectedUser): StreamMemberOutput => ({
     userId: membership.userId,
     streamId: membership.streamId,
     role: membership.role,
-    joinedAt: membership.joinedAt, // Keep as Date for now, will be stringified later if needed
-    user: { // Map nested user safely
+    joinedAt: membership.joinedAt,
+    user: { // Map selected user fields
         id: membership.user.id,
-        name: membership.user.name ?? null, // Handle potential null name from DB/select
+        name: membership.user.name ?? null,
         email: membership.user.email,
     }
 });
@@ -60,35 +60,36 @@ export const streamService = {
 
     async getStreamDetails(streamId: string, userId: string): Promise<StreamDetailedOutput> {
         await this.ensureMemberAccess(streamId, userId);
-        const stream = await streamRepository.findById(streamId); // Fetches StreamWithDetailsAndTimetables
-
-        if (!stream) {
-            throw new NotFoundError('Stream not found');
-        }
+        const stream = await streamRepository.findById(streamId);
+        if (!stream) throw new NotFoundError('Stream not found');
 
         let earliestValidFrom: Date | null = null;
         if (stream.timetables && stream.timetables.length > 0 && stream.timetables[0].validFrom) {
             earliestValidFrom = stream.timetables[0].validFrom;
         }
 
-        // Construct the final object matching StreamDetailedOutput DTO
         const result: StreamDetailedOutput = {
-            id: stream.id,
-            name: stream.name,
-            streamCode: stream.streamCode,
-            ownerId: stream.ownerId,
-            owner: { // Map owner fields matching OwnerUserSchema (dto)
-                id: stream.owner.id,
-                name: stream.owner.name ?? null,
-                email: stream.owner.email,
-            },
-            // Map members using the corrected helper
-            members: stream.members.map(mapMembershipToOutput),
+            id: stream.id, name: stream.name, streamCode: stream.streamCode, ownerId: stream.ownerId,
+            owner: { id: stream.owner.id, name: stream.owner.name ?? null, email: stream.owner.email },
+            members: stream.members.map(mapMembershipToOutput), // Use the corrected mapper
             streamStartDate: earliestValidFrom ? earliestValidFrom.toISOString() : null,
         };
         return result;
     },
     // --- End Updated getStreamDetails ---
+
+    // --- NEW: Get stream members (used by attendance service) ---
+    async getStreamMembers(streamId: string): Promise<StreamMemberOutput[]> {
+        // Could add permission check here if needed (e.g., only members can see other members)
+        const members = await streamRepository.findStreamMembers(streamId);
+        return members.map(mapMembershipToOutput);
+    },
+
+    // --- NEW: Get stream member IDs (more efficient if only IDs needed) ---
+    async getStreamMemberUserIds(streamId: string): Promise<string[]> {
+        // Could add permission check here if needed
+        return streamRepository.findStreamMemberUserIds(streamId);
+    },
 
     // Utility function to be used by other services (like Timetable) to check admin rights
     async ensureAdminAccess(streamId: string, userId: string): Promise<void> {

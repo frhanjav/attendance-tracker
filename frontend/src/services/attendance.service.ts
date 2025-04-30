@@ -49,6 +49,17 @@ export interface AttendanceRecordOutput {
     markedAt: string; // API returns ISO string
 }
 
+export interface WeeklyAttendanceViewEntry { // Export this type too
+    date: string; // YYYY-MM-DD
+    dayOfWeek: number;
+    subjectName: string;
+    courseCode: string | null;
+    startTime: string | null;
+    endTime: string | null;
+    status: AttendanceStatus;
+    recordId?: string;
+}
+
 // Type for the raw calendar event data received FROM backend API
 // Matches CalendarEventOutputSchema from backend DTO (dates are strings)
 interface RawCalendarEvent {
@@ -84,47 +95,45 @@ interface BulkAttendanceResponse {
     data: { message: string; entriesCreated: number };
 }
 
+interface WeeklyAttendanceViewResponse { // For the new endpoint
+    status: string;
+    data: { attendanceView: WeeklyAttendanceViewEntry[] };
+}
+
 // --- Service Functions ---
 export const attendanceService = {
-    /**
-     * Fetches calendar event data for a given stream and date range.
-     * Converts date strings from the API into Date objects for react-big-calendar.
-     */
-    getCalendarData: async (streamId: string, startDate: string, endDate: string): Promise<CalendarEvent[]> => {
+
+    // --- Get Weekly Attendance View ---
+    getWeeklyAttendanceView: async (streamId: string, startDate: string, endDate: string): Promise<WeeklyAttendanceViewEntry[]> => {
         try {
-            const response = await apiClient.get<CalendarDataResponse>('/attendance/calendar', {
-                params: { streamId, startDate, endDate }
+            const response = await apiClient.get<WeeklyAttendanceViewResponse>(`/attendance/weekly/${streamId}`, {
+                params: { startDate, endDate }
             });
-
-            if (response.data?.status !== 'success' || !response.data?.data?.events) {
-                console.warn("Received invalid API response structure for calendar data:", response.data);
-                return []; // Return empty array on invalid structure
+            if (response.data?.status !== 'success' || !response.data?.data?.attendanceView) {
+                throw new Error("Invalid API response structure for weekly attendance view.");
             }
-
-            const rawEvents: RawCalendarEvent[] = response.data.data.events;
-
-            // Use map with explicit typing for the parameter and the return value
-            const transformedEvents: CalendarEvent[] = rawEvents.map(
-                (rawEvent: RawCalendarEvent): CalendarEvent => {
-                    // Construct the CalendarEvent object explicitly
-                    const eventResource = rawEvent.resource ? { ...rawEvent.resource } : undefined;
-                    return {
-                        title: rawEvent.title,
-                        start: new Date(rawEvent.start), // Parse date string
-                        end: new Date(rawEvent.end),     // Parse date string
-                        allDay: rawEvent.allDay,
-                        resource: eventResource,
-                    };
-                }
-            );
-
-            return transformedEvents;
-
+            // Dates are already strings (YYYY-MM-DD) in WeeklyAttendanceViewEntry
+            return response.data.data.attendanceView;
         } catch (error: any) {
-            console.error("Error fetching calendar data:", error);
-            throw new Error(error?.message || 'Failed to fetch calendar data');
+            console.error("Error fetching weekly attendance view:", error);
+            throw new Error(error.message || 'Failed to fetch weekly attendance view');
         }
     },
+
+    // --- Cancel Class Globally ---
+    cancelClassGlobally: async (data: { streamId: string; classDate: string; subjectName: string; startTime?: string | null }): Promise<{ message: string; updatedCount: number }> => {
+        try {
+           // Assuming backend route is POST /attendance/cancel
+           const response = await apiClient.post<{ status: string; data: { message: string; updatedCount: number } }>('/attendance/cancel', data);
+            if (response.data?.status !== 'success' || !response.data?.data) {
+               throw new Error("Invalid API response structure for cancel class.");
+           }
+           return response.data.data;
+       } catch (error: any) {
+           console.error("Error cancelling class:", error);
+           throw new Error(error.message || 'Failed to cancel class');
+       }
+   },
 
     /**
      * Sends a request to mark the status of a specific class instance.

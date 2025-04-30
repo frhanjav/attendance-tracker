@@ -2,6 +2,13 @@ import { Request, Response, NextFunction } from 'express';
 import { timetableService } from './timetable.service';
 import { CreateTimetableFrontendInput } from './timetable.dto';
 import { ParsedQs } from 'qs'; // For typed query params
+import { z } from 'zod'; // Import Zod if needed
+
+// Define schema for weekly schedule query params if not using validateRequest middleware
+const weeklyScheduleQuerySchema = z.object({
+    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
 
 export const timetableController = {
     // --- Create Timetable (Uses new schema/service input) ---
@@ -71,26 +78,32 @@ export const timetableController = {
         }
     },
 
-    // --- NEW: Update Timetable ---
-    async handleUpdateTimetable(req: Request<{ timetableId: string }, {}, CreateTimetableFrontendInput>, res: Response, next: NextFunction) {
-         try {
+    // --- NEW: Get Timetable List for Import ---
+    async handleGetTimetableListForImport(req: Request<{ streamId: string }>, res: Response, next: NextFunction) {
+        try {
             const userId = req.user!.id;
-            const timetableId = req.params.timetableId;
-            // Service expects nested structure from req.body
-            const timetable = await timetableService.updateTimetable(timetableId, req.body, userId);
-            res.status(200).json({ status: 'success', data: { timetable } });
+            const streamId = req.params.streamId;
+            const timetableList = await timetableService.getTimetableListForImport(streamId, userId);
+            res.status(200).json({ status: 'success', results: timetableList.length, data: { timetables: timetableList } });
         } catch (error) {
             next(error);
         }
     },
 
-    // --- NEW: Delete Timetable ---
-    async handleDeleteTimetable(req: Request<{ timetableId: string }>, res: Response, next: NextFunction) {
-        try {
-            const userId = req.user!.id;
-            const timetableId = req.params.timetableId;
-            const result = await timetableService.deleteTimetable(timetableId, userId);
-            res.status(200).json({ status: 'success', data: result }); // Or status 204 No Content
+    // --- NEW: Get Weekly Schedule View ---
+    async handleGetWeeklySchedule(
+        req: Request<{ streamId: string }, {}, {}, { startDate?: string, endDate?: string } & ParsedQs>,
+        res: Response,
+        next: NextFunction
+    ) {
+         try {
+            const userId = req.user!.id; // User requesting the view
+            const streamId = req.params.streamId;
+            // Validation handled by middleware
+            const { startDate, endDate } = req.query as { startDate: string, endDate: string };
+
+            const weeklySchedule = await timetableService.getWeeklySchedule(streamId, startDate, endDate, userId);
+            res.status(200).json({ status: 'success', data: { schedule: weeklySchedule } });
         } catch (error) {
             next(error);
         }

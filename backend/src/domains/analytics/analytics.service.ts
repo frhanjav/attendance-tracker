@@ -1,143 +1,133 @@
 // backend/src/domains/analytics/analytics.service.ts
 
 import { attendanceRepository } from '../attendance/attendance.repository';
-// NOTE: We directly query timetables here for optimization, reducing dependency on timetableService for this specific task.
-// import { timetableService } from '../timetable/timetable.service';
 import { streamService } from '../stream/stream.service';
+// Import DTOs and ensure field names match (e.g., totalHeldClasses)
 import { AttendanceCalculatorInput, StreamAnalyticsOutput, SubjectStatsOutput, AttendanceProjectionOutput } from './analytics.dto';
 import { NotFoundError, BadRequestError } from '../../core/errors';
-import { AttendanceStatus, Timetable, TimetableEntry } from '@prisma/client'; // Import necessary Prisma types
+import { AttendanceStatus, Timetable, TimetableEntry } from '@prisma/client';
 import { normalizeDate, getDaysInInterval, getISODayOfWeek, formatDate, isDateInTimetableRange } from '../../core/utils';
 import { addDays, isBefore, startOfToday, parseISO } from 'date-fns';
-import prisma from '../../infrastructure/prisma'; // Import prisma client directly for optimized query
+import prisma from '../../infrastructure/prisma';
 
-// Define type for timetable with entries for clarity within this service
+// Type for timetable with entries used locally
 type TimetableWithEntries = Timetable & { entries: TimetableEntry[] };
 
 export const analyticsService = {
 
     /**
-     * Calculates detailed attendance statistics for a user in a stream, optionally filtered by date range.
-     * Optimized to fetch timetables once.
+     * Calculates detailed attendance statistics for a user in a stream.
+     * Optimized to fetch data efficiently.
      */
     async getStreamAttendanceStats(
         streamId: string,
-        targetUserId: string, // The user whose stats are being calculated
-        requestingUserId: string, // The user making the request
+        targetUserId: string,
+        requestingUserId: string,
         startDateStr?: string,
         endDateStr?: string
     ): Promise<StreamAnalyticsOutput> {
         console.log(`[Analytics Service BE] START getStreamAttendanceStats for stream ${streamId}, user ${targetUserId}`);
-        await streamService.ensureMemberAccess(streamId, requestingUserId); // Permission check
+        await streamService.ensureMemberAccess(streamId, requestingUserId);
 
-        // Determine date range, default to epoch start / today end if not provided
-        const startDate = startDateStr ? normalizeDate(startDateStr) : new Date(0);
-        const endDate = endDateStr ? normalizeDate(endDateStr) : normalizeDate(new Date());
+        let startDate: Date;
+        const endDate = endDateStr ? normalizeDate(endDateStr) : normalizeDate(new Date()); // Default end to today
+
+        if (startDateStr) {
+            startDate = normalizeDate(startDateStr);
+        } else {
+            // --- Find Earliest Timetable Start Date ---
+            console.log(`[Analytics Service BE] Finding earliest timetable start date for stream ${streamId}...`);
+            const earliestTimetable = await prisma.timetable.findFirst({
+                where: { streamId: streamId },
+                orderBy: { validFrom: 'asc' }, // Find the one that started first
+                select: { validFrom: true }
+            });
+            // Default to epoch start ONLY if no timetables exist at all
+            startDate = earliestTimetable?.validFrom ? normalizeDate(earliestTimetable.validFrom) : new Date(0);
+            console.log(`[Analytics Service BE] Using start date: ${formatDate(startDate)}`);
+        }
         console.log(`[Analytics Service BE] Date range: ${formatDate(startDate)} to ${formatDate(endDate)}`);
 
-        // --- Optimization 1: Fetch relevant timetables ONCE ---
-        console.log(`[Analytics Service BE] Fetching potentially active timetables for stream ${streamId}`);
+        // --- Fetch potentially active timetables (using calculated startDate/endDate) ---
+        console.log(`[Analytics Service BE] Fetching potentially active timetetables...`);
         const potentiallyActiveTimetables: TimetableWithEntries[] = await prisma.timetable.findMany({
-             where: {
-                 streamId: streamId,
-                 validFrom: { lte: endDate }, // Started before/on range end
-                 OR: [
-                     { validUntil: null }, // No end date OR
-                     { validUntil: { gte: startDate } } // Ends after/on range start
-                 ]
-             },
-             include: { entries: true }, // Include entries needed for schedule calculation
-             orderBy: { validFrom: 'desc' } // Most recent first helps find active one faster
+             where: { streamId, validFrom: { lte: endDate }, OR: [ { validUntil: null }, { validUntil: { gte: startDate } } ] },
+             include: { entries: true },
+             orderBy: { validFrom: 'desc' }
         });
-        console.log(`[Analytics Service BE] Found ${potentiallyActiveTimetables.length} potentially active timetables.`);
 
-        // --- Optimization 2: Calculate scheduled classes ONCE while iterating days ---
+        // --- Calculate scheduled counts and gather subject details ONCE ---
         console.log(`[Analytics Service BE] Calculating scheduled classes count...`);
-        const scheduledCounts: Record<string, number> = {}; // { [subjectName]: count }
-        // Map to store subject details (name, code) to avoid duplicates
+        const scheduledCounts: Record<string, number> = {};
         const subjectDetailsMap: Map<string, { subjectName: string; courseCode?: string | null }> = new Map();
-        const days = getDaysInInterval(startDate, endDate); // Get all days in the range
+        const days = getDaysInInterval(startDate, endDate);
 
         for (const day of days) {
-            // Find the active timetable for this specific day from the pre-fetched list
-            const activeTimetable = potentiallyActiveTimetables.find(tt =>
-                isDateInTimetableRange(day, tt.validFrom, tt.validUntil) // Utility to check if day falls within tt's range
-            );
-
+            const activeTimetable = potentiallyActiveTimetables.find(tt => isDateInTimetableRange(day, tt.validFrom, tt.validUntil));
             if (activeTimetable) {
-                const dayOfWeek = getISODayOfWeek(day); // Get ISO day (Mon=1, Sun=7)
-                // Find entries scheduled for this day of the week
+                const dayOfWeek = getISODayOfWeek(day);
                 activeTimetable.entries
                     .filter(entry => entry.dayOfWeek === dayOfWeek)
                     .forEach(entry => {
-                        // Increment count for this subject
                         scheduledCounts[entry.subjectName] = (scheduledCounts[entry.subjectName] || 0) + 1;
-                        // Store subject details if not already seen
                         if (!subjectDetailsMap.has(entry.subjectName)) {
                              subjectDetailsMap.set(entry.subjectName, { subjectName: entry.subjectName, courseCode: entry.courseCode });
                         }
                     });
             }
         }
-        // Get unique subject info from the map
         const allSubjects = Array.from(subjectDetailsMap.values());
         console.log(`[Analytics Service BE] Scheduled counts calculation complete. Subjects found: ${allSubjects.length}`);
 
-
-        // --- Get all relevant attendance records for the user in the range ---
+        // --- Fetch user's attendance records ---
         console.log(`[Analytics Service BE] Fetching attendance records for user ${targetUserId}...`);
         const records = await attendanceRepository.findRecordsByUserAndDateRange(targetUserId, streamId, startDate, endDate);
         console.log(`[Analytics Service BE] Found ${records.length} attendance records.`);
 
+        // --- Fetch Cancelled Counts ---
+        console.log(`[Analytics Service BE] Fetching cancelled counts...`);
+        const cancelledCounts = await attendanceRepository.countCancelledClasses(streamId, startDate, endDate);
+        console.log(`[Analytics Service BE] Cancelled counts:`, cancelledCounts);
 
         // --- Calculate stats per subject ---
         console.log(`[Analytics Service BE] Calculating subject stats...`);
         const subjectStats: SubjectStatsOutput[] = [];
         let overallAttended = 0;
-        let overallOccurred = 0; // Classes marked as OCCURRED
+        let overallHeld = 0; // Total scheduled minus cancelled
 
         for (const subjectInfo of allSubjects) {
             const subjectName = subjectInfo.subjectName;
-            // Use the pre-calculated scheduled count
             const totalScheduled = scheduledCounts[subjectName] || 0;
+            const totalCancelled = cancelledCounts[subjectName] || 0;
+            const totalHeld = Math.max(0, totalScheduled - totalCancelled);
 
-            // Filter records for the current subject
             const subjectRecords = records.filter(r => r.subjectName === subjectName);
-
-            // Calculate counts based on status from actual records
             const attended = subjectRecords.filter(r => r.status === AttendanceStatus.OCCURRED).length;
-            const occurred = attended; // For percentage, usually based on OCCURRED status
-            const cancelled = subjectRecords.filter(r => r.status === AttendanceStatus.CANCELLED).length;
-            const replaced = subjectRecords.filter(r => r.status === AttendanceStatus.REPLACED).length;
-            const totalMarked = occurred + cancelled + replaced; // Total records with a non-pending status
+            const totalMarked = subjectRecords.filter(r => r.status === AttendanceStatus.OCCURRED || r.status === AttendanceStatus.CANCELLED).length; // Example definition
 
-            // Calculate percentage based on occurred classes
-            const attendancePercentage = occurred > 0
-                ? parseFloat(((attended / occurred) * 100).toFixed(2))
-                : null; // Avoid division by zero
+            const attendancePercentage = totalHeld > 0
+                ? parseFloat(((attended / totalHeld) * 100).toFixed(2))
+                : null;
 
             subjectStats.push({
                 subjectName,
                 courseCode: subjectInfo.courseCode,
-                totalScheduled, // Calculated from timetable
-                totalMarked,    // Calculated from records
-                totalOccurred: occurred, // Classes that actually happened
-                attended,       // User's attended count for occurred classes
+                totalScheduled,
+                totalMarked,
+                totalHeldClasses: totalHeld, // Use the DTO field name (assuming it's totalHeldClasses)
+                attended,
                 attendancePercentage,
             });
 
-            // Aggregate overall counts
             overallAttended += attended;
-            overallOccurred += occurred;
+            overallHeld += totalHeld;
         }
 
-        // Calculate overall percentage
-        const overallAttendancePercentage = overallOccurred > 0
-            ? parseFloat(((overallAttended / overallOccurred) * 100).toFixed(2))
+        const overallAttendancePercentage = overallHeld > 0
+            ? parseFloat(((overallAttended / overallHeld) * 100).toFixed(2))
             : null;
 
         console.log(`[Analytics Service BE] Stats calculation complete. Returning result.`);
-        // Return dates as ISO strings for API consistency
         return {
             streamId,
             userId: targetUserId,
@@ -145,19 +135,16 @@ export const analyticsService = {
             endDate: endDate.toISOString(),
             overallAttendancePercentage,
             totalAttendedClasses: overallAttended,
-            totalOccurredClasses: overallOccurred,
+            totalHeldClasses: overallHeld, // Use the DTO field name
             subjectStats,
         };
     },
 
     /**
-     * Calculates the attendance projection based on current stats and future scheduled classes.
-     * Optimized to fetch future timetables once.
+     * Calculates the attendance projection.
      */
     async calculateAttendanceProjection(input: AttendanceCalculatorInput, userId: string): Promise<AttendanceProjectionOutput> {
-        console.log(`[Analytics Service BE] START calculateAttendanceProjection for stream ${input.streamId}, user ${userId}`);
-        await streamService.ensureMemberAccess(input.streamId, userId); // Permission check
-
+        await streamService.ensureMemberAccess(input.streamId, userId);
         const today = startOfToday();
         const targetDate = normalizeDate(input.targetDate);
 
@@ -165,83 +152,101 @@ export const analyticsService = {
             throw new BadRequestError('Target date must be today or in the future.');
         }
 
-        // 1. Get current attendance stats up to yesterday
-        console.log(`[Analytics Service BE] Fetching current stats up to yesterday...`);
         const yesterday = addDays(today, -1);
         let currentAttended = 0;
-        let currentOccurred = 0;
+        let currentHeld = 0;
 
-        try {
-            // Call the optimized stats function for the past period
-            const currentStats = await this.getStreamAttendanceStats(
-                input.streamId,
-                userId,
-                userId, // Requesting user is the target user
-                undefined, // Use default start (epoch)
-                formatDate(yesterday) // End date is yesterday
-            );
-
-            // Extract stats based on whether a specific subject was requested
-            if (input.subjectName) {
-                const subjectStat = currentStats.subjectStats.find(s => s.subjectName === input.subjectName);
-                if (!subjectStat) {
-                    // If subject not found in past stats, assume 0/0
-                    console.log(`[Analytics Service BE] Subject ${input.subjectName} not found in past stats.`);
-                    currentAttended = 0;
-                    currentOccurred = 0;
-                    // Optionally throw error: throw new NotFoundError(`Subject ${input.subjectName} not found or no classes held yet.`);
+        // --- Use provided counts if available (Manual Override) ---
+        if (input.currentAttendedInput !== undefined && input.currentHeldInput !== undefined) {
+            console.log(`[Analytics Service BE] Using provided manual counts: Attended=${input.currentAttendedInput}, Held=${input.currentHeldInput}`);
+            currentAttended = input.currentAttendedInput;
+            currentHeld = input.currentHeldInput;
+        } else {
+            // --- Fetch current stats if not provided ---
+            console.log(`[Analytics Service BE] Fetching current stats up to yesterday...`);
+            const yesterday = addDays(today, -1);
+            try {
+                const currentStats = await this.getStreamAttendanceStats(
+                    input.streamId, userId, userId, undefined, formatDate(yesterday)
+                );
+                if (input.subjectName) {
+                    const subjectStat = currentStats.subjectStats.find(s => s.subjectName === input.subjectName);
+                    currentAttended = subjectStat?.attended ?? 0;
+                    currentHeld = subjectStat?.totalHeldClasses ?? 0; // Use correct field name
                 } else {
-                    currentAttended = subjectStat.attended;
-                    currentOccurred = subjectStat.totalOccurred;
+                    currentAttended = currentStats.totalAttendedClasses;
+                    currentHeld = currentStats.totalHeldClasses; // Use correct field name
                 }
-            } else {
-                // Use overall stats
-                currentAttended = currentStats.totalAttendedClasses;
-                currentOccurred = currentStats.totalOccurredClasses;
-            }
-        } catch (e) {
-             // Handle cases where getStreamAttendanceStats might fail (e.g., no timetables ever)
-             if (e instanceof NotFoundError) {
-                 console.log(`[Analytics Service BE] NotFoundError fetching past stats: ${e.message}`);
-                 currentAttended = 0;
-                 currentOccurred = 0;
-             } else {
-                 console.error(`[Analytics Service BE] Error fetching past stats:`, e);
-                 throw e; // Re-throw unexpected errors
-             }
+            } catch (e) {
+                if (e instanceof NotFoundError) {
+                    console.log(`[Analytics Service BE] NotFoundError fetching past stats: ${e.message}`);
+                    // Defaults remain 0
+                } else {
+                    console.error(`[Analytics Service BE] Error fetching past stats:`, e);
+                    throw e;
+                }
+           }
         }
-        console.log(`[Analytics Service BE] Current stats: Attended=${currentAttended}, Occurred=${currentOccurred}`);
+        console.log(`[Analytics Service BE] Using stats for calculation: Attended=${currentAttended}, Held=${currentHeld}`);
 
+        // try {
+        //     // Call the optimized stats function for the past period
+        //     const currentStats = await this.getStreamAttendanceStats(
+        //         input.streamId, userId, userId, undefined, formatDate(yesterday)
+        //     );
 
-        // 2. Calculate future scheduled classes (Optimized)
-        console.log(`[Analytics Service BE] Calculating future scheduled classes from ${formatDate(today)} to ${formatDate(targetDate)}...`);
+        //     // Extract stats based on whether a specific subject was requested
+        //     if (input.subjectName) {
+        //         const subjectStat = currentStats.subjectStats.find(s => s.subjectName === input.subjectName);
+        //         if (!subjectStat) {
+        //             console.log(`[Analytics Service BE] Subject ${input.subjectName} not found in past stats.`);
+        //             // Defaults remain 0
+        //         } else {
+        //             currentAttended = subjectStat.attended;
+        //             currentHeld = subjectStat.totalHeldClasses; // Use correct field name from DTO
+        //         }
+        //     } else {
+        //         currentAttended = currentStats.totalAttendedClasses;
+        //         currentHeld = currentStats.totalHeldClasses; // Use correct field name from DTO
+        //     }
+        // } catch (e) {
+        //      if (e instanceof NotFoundError) {
+        //          console.log(`[Analytics Service BE] NotFoundError fetching past stats: ${e.message}`);
+        //          // Defaults remain 0
+        //      } else {
+        //          console.error(`[Analytics Service BE] Error fetching past stats:`, e);
+        //          throw e;
+        //      }
+        // }
+        // console.log(`[Analytics Service BE] Current stats: Attended=${currentAttended}, Held=${currentHeld}`);
+
+        // 2. Calculate future "Scheduled" and "Cancelled" classes from today up to targetDate
+        console.log(`[Analytics Service BE] Calculating future schedule/cancellations from ${formatDate(today)} to ${formatDate(targetDate)}...`);
         let futureScheduled = 0;
-        // Only calculate if target date is not in the past relative to today
-        if (!isBefore(targetDate, today)) { // Check if targetDate is today or future
-             // Fetch potentially active timetables ONCE for the future range
+        let futureCancelled = 0;
+
+        if (!isBefore(targetDate, today)) { // Only if target date is today or future
+            // Fetch timetables relevant for the future period
             const futureTimetables: TimetableWithEntries[] = await prisma.timetable.findMany({
-                 where: {
-                     streamId: input.streamId,
-                     validFrom: { lte: targetDate }, // Started before or on target date
-                     OR: [ { validUntil: null }, { validUntil: { gte: today } } ] // Ends after or on today, or never ends
-                 },
+                 where: { streamId: input.streamId, validFrom: { lte: targetDate }, OR: [ { validUntil: null }, { validUntil: { gte: today } } ] },
                  include: { entries: true },
-                 orderBy: { validFrom: 'desc' } // Most recent first
+                 orderBy: { validFrom: 'desc' }
             });
 
-            const futureDays = getDaysInInterval(today, targetDate); // Includes today and targetDate
+            // Fetch future cancellations ONCE
+            const futureCancelledMap = await attendanceRepository.countCancelledClasses(input.streamId, today, targetDate);
+
+            const futureDays = getDaysInInterval(today, targetDate);
             const futureScheduledMap: Record<string, number> = {};
 
+            // Iterate days to count scheduled classes
             for (const day of futureDays) {
-                const activeTimetable = futureTimetables.find(tt =>
-                    isDateInTimetableRange(day, tt.validFrom, tt.validUntil)
-                );
+                const activeTimetable = futureTimetables.find(tt => isDateInTimetableRange(day, tt.validFrom, tt.validUntil));
                 if (activeTimetable) {
                     const dayOfWeek = getISODayOfWeek(day);
                     activeTimetable.entries
                         .filter(entry => entry.dayOfWeek === dayOfWeek)
                         .forEach(entry => {
-                            // Count only if the subject matches the input filter, or count all if no filter
                             if (!input.subjectName || entry.subjectName === input.subjectName) {
                                 futureScheduledMap[entry.subjectName] = (futureScheduledMap[entry.subjectName] || 0) + 1;
                             }
@@ -249,46 +254,62 @@ export const analyticsService = {
                 }
             }
 
-            // Sum up counts based on filter
+            // Sum up scheduled and cancelled based on filter
             if (input.subjectName) {
                 futureScheduled = futureScheduledMap[input.subjectName] || 0;
+                futureCancelled = futureCancelledMap[input.subjectName] || 0;
             } else {
                 futureScheduled = Object.values(futureScheduledMap).reduce((sum, count) => sum + count, 0);
+                futureCancelled = Object.values(futureCancelledMap).reduce((sum, count) => sum + count, 0);
             }
         }
-        console.log(`[Analytics Service BE] Future scheduled count: ${futureScheduled}`);
+        console.log(`[Analytics Service BE] Future scheduled: ${futureScheduled}, Future cancelled: ${futureCancelled}`);
 
+        // Calculate future "Held" classes
+        const futureHeld = Math.max(0, futureScheduled - futureCancelled);
+        console.log(`[Analytics Service BE] Future held: ${futureHeld}`);
 
-        // 3. Calculate projection (Logic remains the same)
+        // 3. Calculate projection based on "Held" classes
         console.log(`[Analytics Service BE] Calculating projection...`);
         const targetDecimal = input.targetPercentage / 100;
-        // Assume all future scheduled classes will eventually be marked as 'OCCURRED' for projection
-        const totalFutureOccurredPotential = currentOccurred + futureScheduled;
+        const totalFutureHeldPotential = currentHeld + futureHeld;
 
-        let neededToAttend = Math.ceil(targetDecimal * totalFutureOccurredPotential - currentAttended);
-        neededToAttend = Math.max(0, neededToAttend); // Cannot need negative attendance
-        // Cannot need to attend more classes than are scheduled in the future
-        neededToAttend = Math.min(futureScheduled, neededToAttend);
+        let neededToAttend = Math.ceil(targetDecimal * totalFutureHeldPotential - currentAttended);
+        neededToAttend = Math.max(0, neededToAttend);
+        const clampedNeededToAttend = Math.min(futureHeld, neededToAttend); // How many they *can* actually attend
 
-        const canSkip = futureScheduled - neededToAttend;
-        const currentPercentage = currentOccurred > 0 ? parseFloat(((currentAttended / currentOccurred) * 100).toFixed(2)) : null;
+        const canSkip = futureHeld - clampedNeededToAttend;
+        const currentPercentage = currentHeld > 0 ? parseFloat(((currentAttended / currentHeld) * 100).toFixed(2)) : null;
 
-        // Generate user-friendly message (Logic remains the same)
-        let message = `To reach ${input.targetPercentage}% by ${formatDate(targetDate)}${input.subjectName ? ' for ' + input.subjectName : ''}, `;
-        // ... (message generation logic as before) ...
-         if (neededToAttend > futureScheduled) { message = `It's impossible to reach ${input.targetPercentage}% by ${formatDate(targetDate)} even attending all future ${futureScheduled} classes.`; }
-         else if (neededToAttend <= 0 && currentPercentage !== null && currentPercentage >= input.targetPercentage) { message += `you have already met the target! You can skip all ${futureScheduled} upcoming classes.`; neededToAttend = 0; }
-         else if (futureScheduled === 0) { message = `No classes are scheduled${input.subjectName ? ' for ' + input.subjectName : ''} until ${formatDate(targetDate)}. Current percentage is ${currentPercentage ?? 'N/A'}%.`; }
-         else { message += `you need to attend ${neededToAttend} out of the next ${futureScheduled} scheduled classes. You can skip ${canSkip} classes.`; }
+        // Generate message using "held" context
+        let message = `To reach ${input.targetPercentage}% by ${formatDate(targetDate)}${input.subjectName ? ' for ' + input.subjectName : ''}: `;
+        if (totalFutureHeldPotential <= 0) {
+             message = `No classes ${input.subjectName ? 'for ' + input.subjectName + ' ' : ''}were held or are scheduled to be held by ${formatDate(targetDate)}. Cannot calculate percentage.`;
+        } else if (neededToAttend > futureHeld) { // Check using the original neededToAttend before clamping
+            const maxPossibleAttended = currentAttended + futureHeld;
+            const maxPossiblePercentage = parseFloat(((maxPossibleAttended / totalFutureHeldPotential) * 100).toFixed(2));
+            message = `Even if you attend all ${futureHeld} upcoming held classes, the maximum percentage you can reach by ${formatDate(targetDate)} is approximately ${maxPossiblePercentage.toFixed(1)}%. Your target of ${input.targetPercentage}% is unreachable in this period.`;
+            neededToAttend = clampedNeededToAttend; // Report the max possible attendance needed
+        } else if (clampedNeededToAttend <= 0 && currentPercentage !== null && currentPercentage >= input.targetPercentage) {
+            message += `you have already met or exceeded the target! You can skip all ${futureHeld} upcoming held classes.`;
+            neededToAttend = 0; // Reset needed if already met
+        } else if (futureHeld === 0) {
+             message = `No more classes are scheduled to be held${input.subjectName ? ' for ' + input.subjectName : ''} until ${formatDate(targetDate)}. Current percentage is ${currentPercentage ?? 'N/A'}%.`;
+             neededToAttend = 0;
+        } else {
+            message += `you need to attend ${clampedNeededToAttend} out of the next ${futureHeld} held classes. You can skip ${canSkip} classes.`;
+            neededToAttend = clampedNeededToAttend; // Ensure neededToAttend reflects the clamped value
+        }
 
         console.log(`[Analytics Service BE] Projection calculation complete.`);
+        // Return object matching AttendanceProjectionOutput DTO (using renamed fields)
         return {
             currentAttended,
-            currentOccurred,
+            currentHeld: currentHeld,
             currentPercentage,
-            futureScheduled,
+            futureHeld: futureHeld,
             targetPercentage: input.targetPercentage,
-            neededToAttend,
+            neededToAttend, // Use the realistic clamped value
             canSkip,
             message,
         };

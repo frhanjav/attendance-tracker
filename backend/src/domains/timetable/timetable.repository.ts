@@ -5,69 +5,42 @@ import { normalizeDate } from '../../core/utils';
 type TimetableEntryCreateInput = Omit<TimetableEntry, 'id' | 'timetableId'>;
 
 export const timetableRepository = {
+    // --- CREATE (Remains largely the same) ---
     async create(
         streamId: string,
         name: string,
         validFrom: Date,
         validUntil: Date | null,
-        entries: Omit<TimetableEntry, 'id' | 'timetableId'>[]
-    ): Promise<Timetable & { entries: TimetableEntry[] }>{
-        return prisma.timetable.create({
-            data: {
-                streamId,
-                name,
-                validFrom: normalizeDate(validFrom), // Store normalized date
-                validUntil: validUntil ? normalizeDate(validUntil) : null,
-                entries: {
-                    create: entries, // Use Prisma's nested create feature
+        entriesData: TimetableEntryCreateInput[]
+    ): Promise<Timetable & { entries: TimetableEntry[] }> {
+        // Use transaction to ensure timetable and entries are created together
+        return prisma.$transaction(async (tx) => {
+            const newTimetable = await tx.timetable.create({
+                data: {
+                    streamId,
+                    name,
+                    validFrom: normalizeDate(validFrom),
+                    validUntil: validUntil ? normalizeDate(validUntil) : null,
                 },
-            },
-            include: {
-                entries: true, // Include entries in the returned object
+            });
+
+            if (entriesData.length > 0) {
+                await tx.timetableEntry.createMany({
+                    data: entriesData.map(entry => ({
+                        ...entry,
+                        timetableId: newTimetable.id, // Link to the new timetable
+                    })),
+                });
             }
+            // Fetch again to include entries
+            return tx.timetable.findUniqueOrThrow({
+                 where: { id: newTimetable.id },
+                 include: { entries: true }
+            });
         });
     },
 
-    async findByStream(streamId: string): Promise<(Timetable & { entries: TimetableEntry[] })[]> {
-        return prisma.timetable.findMany({
-            where: { streamId },
-            include: { entries: true },
-            orderBy: { validFrom: 'desc' }, // Show newest first
-        });
-    },
-
-    /**
-     * Finds the single timetable that is active for a specific date within a stream.
-     * It prioritizes timetables with a closer validFrom date if multiple overlap.
-     * It considers validUntil.
-     */
-    async findActiveByStreamAndDate(streamId: string, date: Date): Promise<(Timetable & { entries: TimetableEntry[] }) | null> {
-        const normalizedTargetDate = normalizeDate(date);
-
-        // Find potential candidates: validFrom <= date AND (validUntil >= date OR validUntil IS NULL)
-        const candidates = await prisma.timetable.findMany({
-            where: {
-                streamId: streamId,
-                validFrom: {
-                    lte: normalizedTargetDate, // Timetable must have started on or before the target date
-                },
-                OR: [
-                    { validUntil: null }, // Timetable has no end date
-                    { validUntil: { gte: normalizedTargetDate } }, // Timetable ends on or after the target date
-                ],
-            },
-            include: {
-                entries: true,
-            },
-            orderBy: {
-                validFrom: 'desc', // Prioritize the one that started most recently
-            },
-            take: 1, // Get only the most recent valid one
-        });
-
-        return candidates.length > 0 ? candidates[0] : null;
-    },
-
+    // --- FIND BY ID (Remains the same) ---
     async findById(timetableId: string): Promise<(Timetable & { entries: TimetableEntry[] }) | null> {
         return prisma.timetable.findUnique({
             where: { id: timetableId },
@@ -75,72 +48,38 @@ export const timetableRepository = {
         });
     },
 
-    async update(
-        timetableId: string,
-        data: {
-            name: string;
-            validFrom: Date;
-            validUntil: Date | null;
-            // Expect flat entries array here, service layer will transform
-            entriesData: TimetableEntryCreateInput[];
-        }
-    ): Promise<Timetable & { entries: TimetableEntry[] }> {
-        // Use a transaction to ensure atomicity: delete old entries, update timetable, create new entries
-        return prisma.$transaction(async (tx) => {
-            // 1. Delete existing entries for this timetable
-            await tx.timetableEntry.deleteMany({
-                where: { timetableId: timetableId },
-            });
-
-            // 2. Update the timetable metadata (name, dates)
-            const updatedTimetable = await tx.timetable.update({
-                where: { id: timetableId },
-                data: {
-                    name: data.name,
-                    validFrom: normalizeDate(data.validFrom),
-                    validUntil: data.validUntil ? normalizeDate(data.validUntil) : null,
-                    // Don't update entries directly here
-                },
-            });
-
-            // 3. Create the new entries
-            if (data.entriesData.length > 0) {
-                await tx.timetableEntry.createMany({
-                    data: data.entriesData.map(entry => ({
-                        ...entry,
-                        timetableId: timetableId, // Link to the updated timetable
-                    })),
-                });
-            }
-
-            // 4. Fetch the updated timetable with its new entries
-            // We need to query again outside the update to get included relations reliably after createMany
-            const result = await tx.timetable.findUniqueOrThrow({
-                 where: { id: timetableId },
-                 include: { entries: true }
-            });
-
-            return result;
+    // --- FIND MANY FOR STREAM (For Import List) ---
+     async findManyForStream(streamId: string): Promise<Pick<Timetable, 'id' | 'name' | 'validFrom' | 'validUntil'>[]> {
+        return prisma.timetable.findMany({
+            where: { streamId },
+            select: { // Select only needed fields for the list
+                id: true,
+                name: true,
+                validFrom: true,
+                validUntil: true,
+            },
+            orderBy: { validFrom: 'desc' }, // Show newest first
         });
     },
 
-    async deleteById(timetableId: string): Promise<Timetable> {
-        // Prisma cascading delete should handle entries if set up in schema.prisma
-        // onDelete: Cascade on the TimetableEntry relation to Timetable
-        // If not using cascade, delete entries manually first in a transaction.
-        return prisma.timetable.delete({
-            where: { id: timetableId },
+    // --- FIND ACTIVE (Remains the same, used by other services) ---
+    async findActiveByStreamAndDate(streamId: string, date: Date): Promise<(Timetable & { entries: TimetableEntry[] }) | null> {
+        // ... (implementation remains the same) ...
+         const normalizedTargetDate = normalizeDate(date);
+        const candidates = await prisma.timetable.findMany({
+            where: {
+                streamId: streamId,
+                validFrom: { lte: normalizedTargetDate },
+                OR: [ { validUntil: null }, { validUntil: { gte: normalizedTargetDate } } ],
+            },
+            include: { entries: true },
+            orderBy: { validFrom: 'desc' },
+            take: 1,
         });
+        return candidates.length > 0 ? candidates[0] : null;
     },
 
-    // Helper to get streamId for permission checks
-    async getStreamIdForTimetable(timetableId: string): Promise<string | null> {
-        const timetable = await prisma.timetable.findUnique({
-            where: { id: timetableId },
-            select: { streamId: true }
-        });
-        return timetable?.streamId ?? null;
-    }
-
-    // Add update/delete methods as needed
+    // --- REMOVED update method ---
+    // --- REMOVED deleteById method ---
+    // --- REMOVED getStreamIdForTimetable (no longer needed for update/delete permissions) ---
 };

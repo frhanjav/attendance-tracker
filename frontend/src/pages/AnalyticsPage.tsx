@@ -1,246 +1,509 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { analyticsService, StreamAnalyticsData, AttendanceProjection, AttendanceCalculatorInput } from '../services/analytics.service'; // Import service and types
-import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table"; // Use shadcn Table
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+// Import service and types - ensure types match backend DTOs (e.g., totalHeldClasses)
+import {
+    analyticsService,
+    StreamAnalyticsData,
+    AttendanceProjection,
+    AttendanceCalculatorInput,
+    SubjectStats,
+} from '../services/analytics.service';
+import { Button } from '../components/ui/button'; // Use alias
+import { Input } from '../components/ui/input'; // Use alias
+import { Label } from '../components/ui/label'; // Use alias
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card'; // Use alias
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from '../components/ui/table'; // Use alias
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '../components/ui/select'; // Use alias
+import { Switch } from '../components/ui/switch'; // Import Switch component
 import toast from 'react-hot-toast';
 import { addDays, format, parseISO } from 'date-fns';
-import { Check, Calendar, TrendingUp, Calculator, Info } from 'lucide-react'; // Icons
+import { Check, Calendar, TrendingUp, Calculator, Info, Loader2, Edit } from 'lucide-react';
 
 // --- Zod Schema for Calculator Form ---
 const calculatorSchema = z.object({
-    targetPercentage: z.coerce.number() // Coerce input string to number
-        .min(0, "Target must be at least 0%")
-        .max(100, "Target cannot exceed 100%"),
-    targetDate: z.string().min(1, "Target date is required"), // Validate format if needed
-    subjectName: z.string().optional(), // Optional subject filter
+    targetPercentage: z.coerce.number().min(0).max(100),
+    targetDate: z.string().min(1, 'Target date is required'),
+    subjectName: z.string().optional(),
 });
 type CalculatorFormInputs = z.infer<typeof calculatorSchema>;
-// --- End Schema ---
 
+type ManualAttendanceInput = Record<string, string>; // { [subjectName]: attendedCountString }
 
 const AnalyticsPage: React.FC = () => {
     const { streamId } = useParams<{ streamId: string }>();
     const [projectionResult, setProjectionResult] = useState<AttendanceProjection | null>(null);
+    const [isManualMode, setIsManualMode] = useState(false); // State for toggle
+    const [manualAttendance, setManualAttendance] = useState<ManualAttendanceInput>({}); // State for manual inputs
 
     // --- Fetch Analytics Data ---
-    // Query key should be specific enough, e.g., include filters if used
-    const { data: analyticsData, isLoading, error, status } = useQuery<StreamAnalyticsData, Error>({
-        queryKey: ['streamAnalytics_v2', streamId], // Added _v2
+    const {
+        data: analyticsData,
+        isLoading,
+        error,
+        status,
+    } = useQuery<StreamAnalyticsData, Error>({
+        queryKey: ['streamAnalytics', streamId], // This key needs invalidation from AttendancePage
         queryFn: () => analyticsService.getStreamAnalytics(streamId!),
         enabled: !!streamId,
-        staleTime: 1000 * 60 * 5, // Cache for 5 mins
+        staleTime: 1000 * 60 * 5, // 5 minutes
+        refetchOnWindowFocus: false, // Prevent excessive refetching
     });
 
-    console.log(`[AnalyticsPage] Query Status: ${status}, IsLoading: ${isLoading}, Error: ${error}, Data:`, analyticsData);
-    console.log(`[AnalyticsPage] streamId value: ${streamId}`); // <-- ADD THIS LOG
+    useEffect(() => {
+        if (analyticsData?.subjectStats) {
+            const initialManualValues: ManualAttendanceInput = {};
+            analyticsData.subjectStats.forEach((stat) => {
+                // Initialize with fetched attended count or empty string
+                initialManualValues[stat.subjectName] = String(stat.attended ?? '');
+            });
+            setManualAttendance(initialManualValues);
+        }
+    }, [analyticsData, isManualMode]);
 
+    // --- Recalculate Stats Based on Mode ---
+    const displayStats = useMemo((): StreamAnalyticsData | null => {
+        if (!analyticsData) return null;
+
+        // If not in manual mode, return fetched data directly
+        if (!isManualMode) return analyticsData;
+
+        // --- Recalculate in Manual Mode ---
+        let overallAttendedManual = 0;
+        let overallHeldManual = 0; // Held = Scheduled - Cancelled (assuming fetched data has correct held count)
+
+        const manualSubjectStats: SubjectStats[] = analyticsData.subjectStats.map((stat) => {
+            const manualAttendedStr = manualAttendance[stat.subjectName] ?? String(stat.attended);
+            const manualAttendedNum = parseInt(manualAttendedStr, 10);
+            // Use fetched attended count if manual input is invalid or empty
+            const attended =
+                !isNaN(manualAttendedNum) && manualAttendedNum >= 0
+                    ? manualAttendedNum
+                    : stat.attended;
+            const held = stat.totalHeldClasses; // Use 'Held' count from fetched data
+
+            const percentage = held > 0 ? parseFloat(((attended / held) * 100).toFixed(2)) : null;
+
+            overallAttendedManual += attended;
+            overallHeldManual += held;
+
+            return {
+                ...stat, // Keep other fetched stats like scheduled, marked
+                attended: attended, // Override attended count
+                attendancePercentage: percentage, // Recalculate percentage
+            };
+        });
+
+        const overallPercentageManual =
+            overallHeldManual > 0
+                ? parseFloat(((overallAttendedManual / overallHeldManual) * 100).toFixed(2))
+                : null;
+
+        // Return a new object with recalculated values
+        return {
+            ...analyticsData,
+            totalAttendedClasses: overallAttendedManual,
+            totalHeldClasses: overallHeldManual, // Keep original held count
+            overallAttendancePercentage: overallPercentageManual,
+            subjectStats: manualSubjectStats,
+        };
+    }, [analyticsData, isManualMode, manualAttendance]);
 
     // --- Calculator Form Setup ---
-    const { register, handleSubmit, control, formState: { errors: calcErrors } } = useForm<CalculatorFormInputs>({
+    const {
+        register,
+        handleSubmit,
+        control,
+        formState: { errors: calcErrors },
+    } = useForm<CalculatorFormInputs>({
         resolver: zodResolver(calculatorSchema),
         defaultValues: {
             targetPercentage: 75,
             targetDate: format(addDays(new Date(), 30), 'yyyy-MM-dd'),
-            subjectName: "__OVERALL__", // <-- Use placeholder value as default
+            subjectName: '__OVERALL__', // Use placeholder value
         },
         mode: 'onSubmit',
     });
 
-    // Get unique subjects from fetched stats for the dropdown
+    // Get unique subjects from fetched stats
     const availableSubjects = useMemo(() => {
         if (!analyticsData?.subjectStats) return [];
-        // Get unique subject names
-        return [...new Set(analyticsData.subjectStats.map(s => s.subjectName))].sort();
+        return [...new Set(analyticsData.subjectStats.map((s) => s.subjectName))].sort();
     }, [analyticsData]);
 
     // --- Calculator Mutation ---
     const calculateMutation = useMutation<AttendanceProjection, Error, AttendanceCalculatorInput>({
         mutationFn: analyticsService.calculateProjection,
         onSuccess: (data) => {
-            setProjectionResult(data); // Store result in state
-            toast.success("Projection calculated!");
+            setProjectionResult(data);
+            toast.success('Projection calculated!');
         },
         onError: (error) => {
-            setProjectionResult(null); // Clear previous result on error
+            setProjectionResult(null);
             toast.error(`Calculation failed: ${error.message}`);
         },
     });
 
     // --- Calculator Submit Handler ---
     const onCalculateSubmit = (formData: CalculatorFormInputs) => {
-        if (!streamId) return;
-        setProjectionResult(null); // Clear previous result
+        if (!streamId || !displayStats) {
+            // Need displayStats to get current values in manual mode
+            toast.error('Cannot calculate projection: data not available.');
+            return;
+        }
+        setProjectionResult(null);
 
-        calculateMutation.mutate({
+        let currentAttendedInput: number | undefined = undefined;
+        let currentHeldInput: number | undefined = undefined;
+
+        // If in manual mode, get the current values from the recalculated displayStats
+        if (isManualMode) {
+            if (formData.subjectName && formData.subjectName !== '__OVERALL__') {
+                const manualSubjectStat = displayStats.subjectStats.find(
+                    (s) => s.subjectName === formData.subjectName,
+                );
+                currentAttendedInput = manualSubjectStat?.attended;
+                currentHeldInput = manualSubjectStat?.totalHeldClasses;
+            } else {
+                currentAttendedInput = displayStats.totalAttendedClasses;
+                currentHeldInput = displayStats.totalHeldClasses;
+            }
+            // Basic validation for manually derived counts
+            if (currentAttendedInput === undefined || currentHeldInput === undefined) {
+                toast.error('Cannot calculate projection: manual attendance data is incomplete.');
+                return;
+            }
+            if (currentAttendedInput > currentHeldInput) {
+                toast.error(
+                    `Manual attended count (${currentAttendedInput}) cannot exceed held count (${currentHeldInput}) for calculation.`,
+                );
+                return;
+            }
+        }
+
+        // Construct payload for the mutation
+        const mutationInput: AttendanceCalculatorInput = {
             streamId: streamId,
             targetPercentage: formData.targetPercentage,
             targetDate: formData.targetDate,
-            // If subjectName is the placeholder, send undefined to the backend
-            subjectName: formData.subjectName === "__OVERALL__" ? undefined : formData.subjectName,
-        });
+            subjectName: formData.subjectName === '__OVERALL__' ? undefined : formData.subjectName,
+            // Conditionally include manual counts
+            currentAttendedInput: isManualMode ? currentAttendedInput : undefined,
+            currentHeldInput: isManualMode ? currentHeldInput : undefined,
+        };
+
+        console.log('Calculator Payload:', mutationInput); // Log payload
+        calculateMutation.mutate(mutationInput);
+    };
+
+    // --- Manual Input Handler ---
+    const handleManualInputChange = (subjectName: string, value: string, maxAllowed: number) => {
+        // Allow empty string or non-negative integers
+        if (value === '' || /^\d+$/.test(value)) {
+            const numValue = parseInt(value, 10);
+            // Check if the number exceeds maxAllowed (only if value is not empty)
+            if (!isNaN(numValue) && numValue > maxAllowed) {
+                // Optionally provide feedback or just cap the value
+                toast.error(
+                    `Attended count cannot exceed held count (${maxAllowed}) for ${subjectName}.`,
+                );
+                // Cap the value in state (optional)
+                setManualAttendance((prev) => ({ ...prev, [subjectName]: String(maxAllowed) }));
+            } else {
+                // Update state with valid input (number string or empty string)
+                setManualAttendance((prev) => ({ ...prev, [subjectName]: value }));
+            }
+        }
+        // Ignore invalid characters (non-digits)
     };
 
     // --- Render Loading/Error States ---
-    if (isLoading) return <div className="text-center p-10">Loading analytics...</div>;
-    if (error) return <div className="text-center p-10 text-red-500">Error loading analytics: {error.message}</div>;
-    if (!analyticsData) return <div className="text-center p-10">No analytics data found for this stream.</div>;
+    if (isLoading)
+        return (
+            <div className="text-center p-10 flex justify-center items-center">
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading analytics...
+            </div>
+        );
+    if (error)
+        return (
+            <div className="text-center p-10 text-red-500">
+                Error loading analytics: {error.message}
+            </div>
+        );
+    // Add check specifically for analyticsData after loading/error handled
+    if (!displayStats)
+        return <div className="text-center p-10">No analytics data found for this stream.</div>;
 
     // --- Main Render ---
     return (
         <div className="space-y-8">
-            <h1 className="text-3xl font-bold text-gray-800">Attendance Analytics</h1>
-            <p className="text-sm text-gray-500 -mt-6">
-                Stats calculated from {format(parseISO(analyticsData.startDate), 'MMM dd, yyyy')} to {format(parseISO(analyticsData.endDate), 'MMM dd, yyyy')}
-            </p>
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+                <h1 className="text-3xl font-bold text-gray-800">Attendance Analytics</h1>
+                {/* Manual Mode Toggle */}
+                <div className="flex items-center space-x-2 p-2 bg-yellow-50 border border-yellow-200 rounded-md">
+                    <Switch
+                        id="manual-mode-switch"
+                        checked={isManualMode}
+                        onCheckedChange={setIsManualMode}
+                    />
+                    <Label
+                        htmlFor="manual-mode-switch"
+                        className="text-sm font-medium text-yellow-800 flex items-center gap-1"
+                    >
+                        <Edit size={14} /> Manual Override Mode
+                    </Label>
+                </div>
+            </div>
+            {displayStats.startDate && displayStats.endDate && (
+                <p className="text-sm text-gray-500 -mt-6">
+                    Stats calculated from {format(parseISO(displayStats.startDate), 'MMM dd, yyyy')}{' '}
+                    to {format(parseISO(displayStats.endDate), 'MMM dd, yyyy')}
+                    {isManualMode && (
+                        <span className="font-semibold text-yellow-700 ml-2">
+                            (Using Manually Entered Attendance)
+                        </span>
+                    )}
+                </p>
+            )}
 
-            {/* Overall Stats Cards */}
+            {/* Overall Stats Cards (Use displayStats) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                 <Card className="shadow-sm">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-gray-600">Overall Attendance</CardTitle>
-                        <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                    <CardHeader>
+                        {' '}
+                        <CardTitle>Overall Attendance</CardTitle> <TrendingUp />{' '}
                     </CardHeader>
                     <CardContent>
                         <div className="text-3xl font-bold text-blue-600">
-                            {analyticsData.overallAttendancePercentage !== null ? `${analyticsData.overallAttendancePercentage.toFixed(1)}%` : 'N/A'}
+                            {displayStats.overallAttendancePercentage !== null
+                                ? `${displayStats.overallAttendancePercentage.toFixed(1)}%`
+                                : 'N/A'}
                         </div>
                         <p className="text-xs text-muted-foreground">
-                            ({analyticsData.totalAttendedClasses} / {analyticsData.totalOccurredClasses} classes attended)
+                            ({displayStats.totalAttendedClasses} / {displayStats.totalHeldClasses}{' '}
+                            classes attended)
                         </p>
                     </CardContent>
                 </Card>
-                 <Card className="shadow-sm">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-gray-600">Total Attended</CardTitle>
-                        <Check className="h-4 w-4 text-muted-foreground" />
+                <Card className="shadow-sm">
+                    <CardHeader>
+                        {' '}
+                        <CardTitle>Total Attended</CardTitle> <Check />{' '}
                     </CardHeader>
                     <CardContent>
                         <div className="text-3xl font-bold">
-                            {analyticsData.totalAttendedClasses}
+                            {displayStats.totalAttendedClasses}
                         </div>
-                         <p className="text-xs text-muted-foreground">Classes marked as 'Occurred'</p>
+                        <p className="text-xs text-muted-foreground">
+                            {isManualMode ? 'Manually Entered' : "Classes marked as 'Occurred'"}
+                        </p>
                     </CardContent>
                 </Card>
-                 <Card className="shadow-sm">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-gray-600">Total Held</CardTitle>
-                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                <Card className="shadow-sm">
+                    <CardHeader>
+                        {' '}
+                        <CardTitle>Total Held</CardTitle> <Calendar />{' '}
                     </CardHeader>
                     <CardContent>
-                        <div className="text-3xl font-bold">
-                             {analyticsData.totalOccurredClasses}
-                        </div>
-                         <p className="text-xs text-muted-foreground">Classes marked as 'Occurred'</p>
+                        <div className="text-3xl font-bold">{displayStats.totalHeldClasses}</div>
+                        <p className="text-xs text-muted-foreground">Scheduled minus Cancelled</p>
                     </CardContent>
                 </Card>
-                {/* Add more cards if needed (e.g., total scheduled) */}
             </div>
 
-            {/* Subject Stats Table */}
+            {/* Subject Stats Table (Use displayStats, conditional input) */}
             <Card className="shadow-sm">
                 <CardHeader>
-                    <CardTitle>Subject Statistics</CardTitle>
-                    <CardDescription>Detailed attendance breakdown by subject.</CardDescription>
+                    {' '}
+                    <CardTitle>Subject Statistics</CardTitle>{' '}
+                    <CardDescription>
+                        Detailed attendance breakdown by subject.
+                    </CardDescription>{' '}
                 </CardHeader>
                 <CardContent>
                     <Table>
                         <TableHeader>
                             <TableRow>
                                 <TableHead>Subject</TableHead>
-                                <TableHead className="text-center">Attended</TableHead>
-                                <TableHead className="text-center">Held (Occurred)</TableHead>
+                                <TableHead className="text-center w-28">
+                                    {isManualMode ? 'Attended (Edit)' : 'Attended'}
+                                </TableHead>{' '}
+                                {/* Adjust width */}
+                                <TableHead className="text-center">Held</TableHead>
                                 <TableHead className="text-center">Scheduled</TableHead>
                                 <TableHead className="text-right">Percentage</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {analyticsData.subjectStats.length === 0 && (
+                            {displayStats.subjectStats.length === 0 && (
                                 <TableRow>
-                                    <TableCell colSpan={5} className="h-24 text-center text-gray-500">
+                                    <TableCell
+                                        colSpan={5}
+                                        className="h-24 text-center text-gray-500"
+                                    >
                                         No subject data available.
                                     </TableCell>
                                 </TableRow>
                             )}
-                            {analyticsData.subjectStats.map((subject) => (
-                                <TableRow key={subject.subjectName}>
-                                    <TableCell className="font-medium">
-                                        {subject.subjectName}
-                                        {subject.courseCode && <span className="block text-xs text-muted-foreground">{subject.courseCode}</span>}
-                                    </TableCell>
-                                    <TableCell className="text-center">{subject.attended}</TableCell>
-                                    <TableCell className="text-center">{subject.totalOccurred}</TableCell>
-                                    <TableCell className="text-center">{subject.totalScheduled}</TableCell>
-                                    <TableCell className="text-right font-medium">
-                                        {subject.attendancePercentage !== null ? `${subject.attendancePercentage.toFixed(1)}%` : 'N/A'}
-                                    </TableCell>
-                                </TableRow>
-                            ))}
+                            {displayStats.subjectStats.map((subject) => {
+                                const maxAttended = subject.totalHeldClasses;
+                                return (
+                                    <TableRow key={subject.subjectName}>
+                                        <TableCell className="font-medium">
+                                            {subject.subjectName}
+                                            {subject.courseCode && (
+                                                <span className="block text-xs text-muted-foreground">
+                                                    {subject.courseCode}
+                                                </span>
+                                            )}
+                                        </TableCell>
+                                        {/* Attended Cell: Input or Text */}
+                                        <TableCell className="text-center">
+                                            {isManualMode ? (
+                                                <Input
+                                                    type="number"
+                                                    min="0"
+                                                    max={maxAttended}
+                                                    value={
+                                                        manualAttendance[subject.subjectName] ?? ''
+                                                    }
+                                                    onChange={(e) =>
+                                                        handleManualInputChange(
+                                                            subject.subjectName,
+                                                            e.target.value,
+                                                            maxAttended,
+                                                        )
+                                                    }
+                                                    className={`h-8 text-center max-w-[60px] mx-auto ${
+                                                        // Optional: Add error style if value > max
+                                                        parseInt(
+                                                            manualAttendance[subject.subjectName] ||
+                                                                '0',
+                                                        ) > maxAttended
+                                                            ? 'border-red-500'
+                                                            : ''
+                                                    }`}
+                                                />
+                                            ) : (
+                                                subject.attended
+                                            )}
+                                        </TableCell>
+                                        <TableCell className="text-center">
+                                            {subject.totalHeldClasses}
+                                        </TableCell>
+                                        <TableCell className="text-center">
+                                            {subject.totalScheduled}
+                                        </TableCell>
+                                        <TableCell className="text-right font-medium">
+                                            {subject.attendancePercentage !== null
+                                                ? `${subject.attendancePercentage.toFixed(1)}%`
+                                                : 'N/A'}
+                                        </TableCell>
+                                    </TableRow>
+                                );
+                            })}
                         </TableBody>
                     </Table>
+                    {isManualMode && (
+                        <p className="text-xs text-muted-foreground mt-3 italic">
+                            Note: Statistics are recalculated based on manually entered 'Attended'
+                            values. 'Held' and 'Scheduled' counts are based on fetched data.
+                        </p>
+                    )}
                 </CardContent>
             </Card>
 
             {/* Attendance Calculator */}
             <Card className="shadow-sm">
-                 <CardHeader>
-                    <CardTitle>Attendance Calculator</CardTitle>
-                    <CardDescription>Calculate how many classes you need to attend/can skip to reach a target percentage by a specific date.</CardDescription>
+                <CardHeader>
+                    {' '}
+                    <CardTitle>Attendance Calculator</CardTitle>{' '}
+                    <CardDescription>
+                        Calculate needed attendance to reach a target percentage.
+                    </CardDescription>{' '}
                 </CardHeader>
                 <CardContent>
                     <form onSubmit={handleSubmit(onCalculateSubmit)} className="space-y-4">
+                        {/* ... Form Inputs (Target %, Target Date, Subject Select) ... */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
-                                <Label htmlFor="targetPercentage">Target Percentage (%) <span className="text-red-500">*</span></Label>
+                                <Label htmlFor="targetPercentage">
+                                    Target Percentage (%) <span className="text-red-500">*</span>
+                                </Label>
                                 <Input
                                     id="targetPercentage"
                                     type="number"
-                                    min="0" max="100" step="0.1"
+                                    min="0"
+                                    max="100"
+                                    step="0.1"
                                     {...register('targetPercentage')}
                                     className={calcErrors.targetPercentage ? 'border-red-500' : ''}
                                 />
-                                {calcErrors.targetPercentage && <p className="text-red-500 text-xs mt-1">{calcErrors.targetPercentage.message}</p>}
+                                {calcErrors.targetPercentage && (
+                                    <p className="text-red-500 text-xs mt-1">
+                                        {calcErrors.targetPercentage.message}
+                                    </p>
+                                )}
                             </div>
                             <div>
-                                <Label htmlFor="targetDate">Target Date <span className="text-red-500">*</span></Label>
+                                <Label htmlFor="targetDate">
+                                    Target Date <span className="text-red-500">*</span>
+                                </Label>
                                 <Input
                                     id="targetDate"
                                     type="date"
                                     {...register('targetDate')}
                                     className={calcErrors.targetDate ? 'border-red-500' : ''}
-                                    min={format(new Date(), 'yyyy-MM-dd')} // Prevent selecting past dates
+                                    min={format(new Date(), 'yyyy-MM-dd')}
                                 />
-                                 {calcErrors.targetDate && <p className="text-red-500 text-xs mt-1">{calcErrors.targetDate.message}</p>}
+                                {calcErrors.targetDate && (
+                                    <p className="text-red-500 text-xs mt-1">
+                                        {calcErrors.targetDate.message}
+                                    </p>
+                                )}
                             </div>
                             <div>
-                                <Label htmlFor="subjectName">Subject (Optional)</Label>
+                                <Label htmlFor="subjectNameCalc">Subject (Optional)</Label>{' '}
+                                {/* Changed ID slightly */}
                                 <Controller
                                     control={control}
                                     name="subjectName"
-                                    defaultValue="__OVERALL__" // Set default value for Controller
+                                    defaultValue="__OVERALL__"
                                     render={({ field }) => (
-                                        // Use field.value in defaultValue for Select if needed,
-                                        // but Select's own defaultValue might suffice
                                         <Select
-                                            onValueChange={(value) => field.onChange(value === "__OVERALL__" ? "" : value)} // Store empty string or subject name
-                                            defaultValue={field.value || "__OVERALL__"} // Use placeholder value
+                                            onValueChange={(value) =>
+                                                field.onChange(value === '__OVERALL__' ? '' : value)
+                                            }
+                                            value={field.value || '__OVERALL__'}
                                         >
-                                            <SelectTrigger id="subjectName">
-                                                <SelectValue placeholder="Overall Attendance" />
+                                            <SelectTrigger id="subjectNameCalc">
+                                                {' '}
+                                                <SelectValue placeholder="Overall Attendance" />{' '}
                                             </SelectTrigger>
                                             <SelectContent>
-                                                {/* Use the non-empty placeholder value */}
-                                                <SelectItem value="__OVERALL__">Overall Attendance</SelectItem>
-                                                {availableSubjects.map(subject => (
-                                                    <SelectItem key={subject} value={subject}>{subject}</SelectItem>
+                                                <SelectItem value="__OVERALL__">
+                                                    Overall Attendance
+                                                </SelectItem>
+                                                {availableSubjects.map((subject) => (
+                                                    <SelectItem key={subject} value={subject}>
+                                                        {subject}
+                                                    </SelectItem>
                                                 ))}
                                             </SelectContent>
                                         </Select>
@@ -250,32 +513,51 @@ const AnalyticsPage: React.FC = () => {
                         </div>
                         <div className="flex justify-end">
                             <Button type="submit" disabled={calculateMutation.isPending}>
-                                {calculateMutation.isPending ? 'Calculating...' : 'Calculate Projection'}
-                                <Calculator size={16} className="ml-2"/>
+                                {calculateMutation.isPending ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        Calculating...
+                                    </>
+                                ) : (
+                                    'Calculate Projection'
+                                )}
+                                <Calculator size={16} className="ml-2" />
                             </Button>
                         </div>
                     </form>
 
-                    {/* Calculator Result */}
+                    {/* Calculator Result Display */}
                     {calculateMutation.isSuccess && projectionResult && (
-                         <div className="mt-6 p-4 bg-blue-50 rounded border border-blue-200 text-blue-800 space-y-2">
-                             <h4 className="font-semibold text-lg flex items-center"><Info size={18} className="mr-2"/>Projection Result:</h4>
-                             <p className="text-sm">{projectionResult.message}</p>
-                             <div className="text-xs grid grid-cols-2 gap-x-4 gap-y-1 pt-2">
-                                 <span>Current Attended: {projectionResult.currentAttended}</span>
-                                 <span>Future Scheduled: {projectionResult.futureScheduled}</span>
-                                 <span>Current Held: {projectionResult.currentOccurred}</span>
-                                 <span>Classes Needed: {projectionResult.neededToAttend}</span>
-                                 <span>Current %: {projectionResult.currentPercentage?.toFixed(1) ?? 'N/A'}%</span>
-                                 <span>Classes Can Skip: {projectionResult.canSkip}</span>
-                             </div>
-                         </div>
+                        <div className="mt-6 p-4 bg-blue-50 rounded border border-blue-200 text-blue-800 space-y-2">
+                            <h4 className="font-semibold text-lg flex items-center">
+                                <Info size={18} className="mr-2" />
+                                Projection Result:
+                            </h4>
+                            <p className="text-sm">{projectionResult.message}</p>
+                            <div className="text-xs grid grid-cols-2 gap-x-4 gap-y-1 pt-2">
+                                <span>Current Attended: {projectionResult.currentAttended}</span>
+                                <span>Future Held: {projectionResult.futureHeld}</span>{' '}
+                                {/* Use futureHeld */}
+                                <span>Current Held: {projectionResult.currentHeld}</span>{' '}
+                                {/* Use currentHeld */}
+                                <span>Classes Needed: {projectionResult.neededToAttend}</span>
+                                <span>
+                                    Current %:{' '}
+                                    {projectionResult.currentPercentage?.toFixed(1) ?? 'N/A'}%
+                                </span>
+                                <span>Classes Can Skip: {projectionResult.canSkip}</span>
+                            </div>
+                        </div>
                     )}
-                     {calculateMutation.isError && (
-                         <div className="mt-6 p-4 bg-red-50 rounded border border-red-200 text-red-800">
-                             <h4 className="font-semibold">Calculation Error</h4>
-                             <p className="text-sm">{calculateMutation.error?.message || 'An unknown error occurred.'}</p>
-                         </div>
+                    {calculateMutation.isError && (
+                        <div className="mt-6 p-4 bg-red-50 rounded border border-red-200 text-red-800">
+                            <h4 className="font-semibold mb-1">Calculation Error</h4>
+                            {/* Display the error message from the mutation's error object */}
+                            <p className="text-sm">
+                                {calculateMutation.error?.message ||
+                                    'An unknown error occurred during calculation.'}
+                            </p>
+                        </div>
                     )}
                 </CardContent>
             </Card>

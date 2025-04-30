@@ -68,7 +68,7 @@ const weekDays = [
     { value: 7, label: 'Sun' },
 ];
 
-interface SubjectInputBlockProps {
+export interface SubjectInputBlockProps {
     subjectIndex: number;
     control: any; // Control object from useForm
     register: any; // Register function from useForm
@@ -76,7 +76,7 @@ interface SubjectInputBlockProps {
     errors: any; // Errors object from formState
 }
 
-const SubjectInputBlock: React.FC<SubjectInputBlockProps> = ({ subjectIndex, control, register, removeSubject, errors }) => {
+export const SubjectInputBlock: React.FC<SubjectInputBlockProps> = ({ subjectIndex, control, register, removeSubject, errors }) => {
     // Nested Field Array for Time Slots within this subject
     const { fields: timeSlotFields, append: appendTimeSlot, remove: removeTimeSlot } = useFieldArray({
         control,

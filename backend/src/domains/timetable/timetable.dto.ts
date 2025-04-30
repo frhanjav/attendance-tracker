@@ -73,34 +73,14 @@ export const TimetableActiveQuerySchema = z.object({
 
 export type CreateTimetableFrontendInput = z.infer<typeof TimetableBodySchema>;
 
-// // --- NEW: Schema for the nested structure received from frontend API ---
-// export const CreateOrUpdateTimetableFrontendSchema = z.object({
-//     // Params might not be needed if timetableId is in URL for update
-//     // params: z.object({ streamId: z.string().cuid() }), // For create
-//     body: z.object({
-//         name: z.string().min(1, { message: 'Timetable name is required' }),
-//         validFrom: z.string().min(1, { message: 'Valid from date required (YYYY-MM-DD)' })
-//             .regex(/^\d{4}-\d{2}-\d{2}$/, { message: "Invalid date format (YYYY-MM-DD)" }),
-//         validUntil: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, { message: "Invalid date format (YYYY-MM-DD)" })
-//             .nullable().optional(), // Allow null or undefined
-//         subjects: z.array(SubjectFrontendSchema).min(1, { message: 'Add at least one subject' })
-//     }),
-//     // Add params validation if needed for specific routes
-//     // params: z.object({ streamId: z.string().cuid() }), // Example for create
-//     // params: z.object({ timetableId: z.string().cuid() }), // Example for update/delete/get
-// }).refine(data => { // Refine on the body object
-//     if (data.body.validUntil && data.body.validFrom) {
-//         // Allow empty string for validUntil before comparison
-//         if (data.body.validUntil === "") return true;
-//         try {
-//             return new Date(data.body.validUntil) >= new Date(data.body.validFrom);
-//         } catch (e) { return false; } // Handle invalid date strings
-//     }
-//     return true;
-// }, {
-//     message: "Valid until date must be on or after the valid from date",
-//     path: ["body", "validUntil"],
-// });
+// --- NEW: DTO for Timetable List (for import feature) ---
+export const TimetableBasicInfoSchema = z.object({
+    id: z.string().cuid(),
+    name: z.string(),
+    validFrom: z.string().datetime(), // ISO String
+    validUntil: z.string().datetime().nullable(), // ISO String or null
+});
+export type TimetableBasicInfo = z.infer<typeof TimetableBasicInfoSchema>;
 
 // Output DTO for a timetable entry
 export const TimetableEntryOutputSchema = TimetableEntryRepositoryInputSchema.extend({
@@ -119,7 +99,6 @@ export const TimetableOutputSchema = z.object({
     validFrom: z.string().datetime({ message: "Invalid ISO date format" }),
     validUntil: z.string().datetime({ message: "Invalid ISO date format" }).nullable(),
     createdAt: z.string().datetime({ message: "Invalid ISO date format" }),
-    updatedAt: z.string().datetime({ message: "Invalid ISO date format" }),
     // Array uses the corrected TimetableEntryOutputSchema
     entries: z.array(TimetableEntryOutputSchema),
 });

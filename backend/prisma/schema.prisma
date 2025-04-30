@@ -10,6 +10,13 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// --- Enums ---
+enum AttendanceStatus {
+  OCCURRED // Class happened, student attended
+  MISSED   // Class happened, student did NOT attend (or default if no record)
+  CANCELLED // Class did not happen (globally cancelled by admin)
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -35,6 +42,8 @@ model Stream {
   owner       User               @relation("StreamOwner", fields: [ownerId], references: [id])
   members     StreamMembership[]
   timetables  Timetable[]
+  // Link global statuses here if needed, or handle via AttendanceRecord
+  // cancelledClasses CancelledClass[] // Example if storing cancellations separately
   attendanceRecords AttendanceRecord[]
   bulkEntries     BulkAttendanceEntry[]
 
@@ -64,7 +73,6 @@ model Timetable {
   validFrom   DateTime // Start date this timetable is active
   validUntil  DateTime? // Optional end date
   createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
 
   stream      Stream           @relation(fields: [streamId], references: [id], onDelete: Cascade)
   entries     TimetableEntry[]
@@ -92,32 +100,33 @@ model TimetableEntry {
 // Could be implicitly calculated or explicitly stored if needed for complex overrides/notes
 // For simplicity here, we link AttendanceRecord directly to Stream/Subject/Date
 
-enum AttendanceStatus {
-  OCCURRED
-  CANCELLED
-  REPLACED
-  PENDING // Default before marking
-}
-
 model AttendanceRecord {
   id          String   @id @default(cuid())
   userId      String
   streamId    String
   subjectName String
+  // Store courseCode at time of record creation for historical accuracy
   courseCode  String?
   classDate   DateTime // The specific date the class was scheduled/held
-  status      AttendanceStatus @default(PENDING)
+  status      AttendanceStatus @default(MISSED)
   markedAt    DateTime @updatedAt // When the status was last changed
-  markedByUserId String? // Optional: Who marked it (if needed)
+
+  // Optional: Track who marked it if needed (e.g., distinguishing admin actions)
+  // markedByUserId String?
+
+  // Optional: Add notes if needed later
+  // notes String?
 
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   stream      Stream   @relation(fields: [streamId], references: [id], onDelete: Cascade)
   // markedBy User? // If tracking who marked is needed
 
+  // Unique constraint: One status per user per class instance
   @@unique([userId, streamId, subjectName, classDate]) // Ensure one record per user/stream/subject/date
   @@index([userId])
   @@index([streamId])
   @@index([classDate])
+  @@index([status]) // Index status for faster querying
 }
 
 // For bulk entry feature
@@ -128,7 +137,8 @@ model BulkAttendanceEntry {
   subjectName     String
   courseCode      String?
   attendedClasses Int      // Number of classes attended by the user for this subject
-  totalClasses    Int      // Total classes held for this subject (calculated at time of entry)
+  // Store total held classes *at the time of calculation* based on new definition
+  totalHeldClasses Int?
   calculationDate DateTime @default(now()) // When this bulk entry was made/calculated
   startDate       DateTime // Start date used for calculation
   endDate         DateTime // End date used for calculation (usually current date)

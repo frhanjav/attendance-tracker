@@ -41,18 +41,18 @@ export interface CreateTimetableFrontendInput { // Input for create/update from 
 // Removed the transformSubjectsToEntries call and backendPayload creation within the updateTimetable function. It now sends the updateData (containing nested subjects) directly. Also added a similar check/log for createTimetable.
 
 // Keep the backend input type as before (flat entries)
-// interface CreateTimetableBackendPayload {
-//     name: string;
-//     validFrom: string;
-//     validUntil?: string | null;
-//     entries: Array<{
-//         dayOfWeek: number;
-//         subjectName: string;
-//         courseCode?: string | null;
-//         startTime?: string | null;
-//         endTime?: string | null;
-//     }>;
-// }
+interface CreateTimetableBackendPayload {
+    name: string;
+    validFrom: string;
+    validUntil?: string | null;
+    entries: Array<{
+        dayOfWeek: number;
+        subjectName: string;
+        courseCode?: string | null;
+        startTime?: string | null;
+        endTime?: string | null;
+    }>;
+}
 
 export interface TimetableOutput { // Match backend TimetableOutput DTO
     id: string;
@@ -73,11 +73,29 @@ export interface TimetableOutput { // Match backend TimetableOutput DTO
     }>;
 }
 
+export interface TimetableBasicInfo { // For import list
+    id: string;
+    name: string;
+    validFrom: string; // ISO String
+    validUntil: string | null; // ISO String or null
+}
+export interface WeeklyScheduleEntry { // For timetable viewer
+    // id: string; // Maybe remove if not stable/needed
+    date: string; // YYYY-MM-DD
+    dayOfWeek: number;
+    subjectName: string;
+    courseCode: string | null;
+    startTime: string | null;
+    endTime: string | null;
+    status: 'SCHEDULED' | 'CANCELLED'; // Global status
+}
+
 interface TimetableListResponse {
     status: string;
     results: number;
     data: { timetables: TimetableOutput[] };
 }
+interface TimetableBasicListResponse { status: string; results: number; data: { timetables: TimetableBasicInfo[] }; } // For import list
 
 interface TimetableCreateResponse {
     status: string;
@@ -88,49 +106,75 @@ interface TimetableUpdateResponse { // Define response type for update
     status: string;
     data: { timetable: TimetableOutput };
 }
+
+interface WeeklyScheduleResponse { status: string; data: { schedule: WeeklyScheduleEntry[] }; } // For weekly view
+
 // --- End Types ---
 
 
 type FlatTimetableEntryInput = Omit<TimetableEntry, 'id' | 'timetableId'>;
 
 // Helper function to transform nested subjects to flat entries
-// const transformSubjectsToEntries = (subjects: CreateTimetableFrontendInput['subjects']): FlatTimetableEntryInput[] => {
-//     const entries: FlatTimetableEntryInput[] = [];
-//     subjects.forEach(subject => {
-//         subject.timeSlots.forEach(slot => {
-//             entries.push({
-//                 dayOfWeek: slot.dayOfWeek,
-//                 subjectName: subject.subjectName,
-//                 // Map empty strings/undefined from frontend to null for DB consistency
-//                 courseCode: subject.courseCode || null,
-//                 startTime: slot.startTime || null,
-//                 endTime: slot.endTime || null,
-//             });
-//         });
-//     });
-//     return entries;
-// };
+const transformSubjectsToEntries = (subjects: CreateTimetableFrontendInput['subjects']): FlatTimetableEntryInput[] => {
+    const entries: FlatTimetableEntryInput[] = [];
+    subjects.forEach(subject => {
+        subject.timeSlots.forEach(slot => {
+            entries.push({
+                dayOfWeek: slot.dayOfWeek,
+                subjectName: subject.subjectName,
+                // Map empty strings/undefined from frontend to null for DB consistency
+                courseCode: subject.courseCode || null,
+                startTime: slot.startTime || null,
+                endTime: slot.endTime || null,
+            });
+        });
+    });
+    return entries;
+};
 
 export const timetableService = {
-    // Function to get timetables for a stream
-    getTimetablesForStream: async (streamId: string): Promise<TimetableOutput[]> => {
+    // --- Get List for Import ---
+    getTimetableListForImport: async (streamId: string): Promise<TimetableBasicInfo[]> => {
         try {
-            const response = await apiClient.get<TimetableListResponse>(`/streams/${streamId}/timetables`);
+            const response = await apiClient.get<TimetableBasicListResponse>(`/timetables/list/${streamId}`);
             return response.data.data.timetables;
         } catch (error: any) {
-            console.error(`Error fetching timetables for stream ${streamId}:`, error);
-            throw new Error(error.message || 'Failed to fetch timetables');
+            console.error(`Error fetching timetable list for stream ${streamId}:`, error);
+            throw new Error(error.message || 'Failed to fetch timetable list');
         }
     },
 
-    // Update createTimetable to accept frontend structure and transform it
+    // --- Get Timetable Details (for import population) ---
+    getTimetableDetails: async (timetableId: string): Promise<TimetableOutput> => {
+        try {
+            const response = await apiClient.get<{ status: string; data: { timetable: TimetableOutput } }>(`/timetables/${timetableId}`);
+            return response.data.data.timetable;
+        } catch (error: any) {
+            console.error(`Error fetching timetable details ${timetableId}:`, error);
+            throw new Error(error.message || 'Failed to fetch timetable details');
+        }
+    },
+
+    // --- Get Weekly Schedule (for viewer) ---
+    getWeeklySchedule: async (streamId: string, startDate: string, endDate: string): Promise<WeeklyScheduleEntry[]> => {
+        try {
+            const response = await apiClient.get<WeeklyScheduleResponse>(`/timetables/weekly/${streamId}`, {
+                params: { startDate, endDate }
+            });
+            if (response.data?.status !== 'success' || !response.data?.data?.schedule) {
+                throw new Error("Invalid API response structure for weekly schedule.");
+            }
+            return response.data.data.schedule;
+        } catch (error: any) {
+            console.error(`Error fetching weekly schedule for stream ${streamId}:`, error);
+            throw new Error(error.message || 'Failed to fetch weekly schedule');
+        }
+    },
+
+    // --- Create Timetable ---
     createTimetable: async (data: { streamId: string } & CreateTimetableFrontendInput): Promise<TimetableOutput> => {
         const { streamId, ...payload } = data;
-        // Ensure payload sent matches CreateTimetableFrontendInput (nested subjects)
-         const createPayload = {
-            ...payload,
-            validUntil: payload.validUntil || null, // Handle empty string for optional date
-         };
+        const createPayload = { ...payload, validUntil: payload.validUntil || null };
         console.log("Payload sent to backend for CREATE (nested):", createPayload);
         try {
             const response = await apiClient.post<TimetableCreateResponse>(`/streams/${streamId}/timetables`, createPayload);
@@ -138,54 +182,6 @@ export const timetableService = {
         } catch (error: any) {
             console.error(`Error creating timetable for stream ${streamId}:`, error);
             throw new Error(error.message || 'Failed to create timetable');
-        }
-    },
-
-    updateTimetable: async (payload: { timetableId: string } & CreateTimetableFrontendInput): Promise<TimetableOutput> => {
-        const { timetableId, ...updateData } = payload; // updateData contains 'subjects'
-
-         // Ensure payload sent matches CreateTimetableFrontendInput (nested subjects)
-         const updatePayload = {
-            ...updateData,
-            validUntil: updateData.validUntil || null, // Handle empty string for optional date
-         };
-
-        console.log("Payload sent to backend for UPDATE (nested):", updatePayload);
-
-        try {
-            // Send the updateData object which contains the nested 'subjects' array
-            const response = await apiClient.put<TimetableUpdateResponse>(
-                `/timetables/${timetableId}`,
-                updatePayload
-            );
-            return response.data.data.timetable;
-        } catch (error: any) {
-            console.error(`Error updating timetable ${timetableId}:`, error);
-            throw new Error(error.response?.data?.message || error.message || 'Failed to update timetable');
-        }
-    },
-
-    // Add deleteTimetable function (as before)
-    deleteTimetable: async (timetableId: string): Promise<void> => {
-        try {
-            // Adjust endpoint if your backend route is different
-            await apiClient.delete(`/timetables/${timetableId}`);
-        } catch (error: any) {
-            console.error(`Error deleting timetable ${timetableId}:`, error);
-            // Rethrow a more specific error message if possible
-            throw new Error(error.response?.data?.message || error.message || 'Failed to delete timetable');
-        }
-    },
-
-    // Function to get details for ONE timetable (for View/Edit page)
-    getTimetableDetails: async (timetableId: string): Promise<TimetableOutput> => {
-        try {
-            // Adjust endpoint if your backend route is different
-            const response = await apiClient.get<{ status: string; data: { timetable: TimetableOutput } }>(`/timetables/${timetableId}`);
-            return response.data.data.timetable;
-        } catch (error: any) {
-            console.error(`Error fetching timetable details ${timetableId}:`, error);
-            throw new Error(error.response?.data?.message || error.message || 'Failed to fetch timetable details');
         }
     },
 };

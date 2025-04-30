@@ -3,7 +3,6 @@ import { Prisma, Stream, StreamMembership, User, Timetable } from '@prisma/clien
 
 // Removed _min Aggregate: We removed the complex _min aggregate from the include block. While powerful, its syntax can be tricky and might not be the most readable way to get the earliest date.
 
-
 // Define the shape of the user object *as selected* in the includes
 type SelectedUser = {
     id: string;
@@ -30,7 +29,6 @@ export type StreamWithDetailsAndTimetables = Stream & {
 
 // Type for findStreamMembers result (can reuse MembershipWithSelectedUser)
 export type StreamMemberWithSelectedUser = MembershipWithSelectedUser;
-
 
 export const streamRepository = {
     async create(name: string, ownerId: string): Promise<Stream> {
@@ -60,25 +58,37 @@ export const streamRepository = {
             where: { id: streamId },
             include: {
                 owner: true, // Include owner details
-                members: { // Include members and their user details
+                members: {
+                    // Include members and their user details
                     include: {
                         // Select only necessary user fields to avoid exposing password hash etc.
                         user: {
-                            select: { id: true, email: true, name: true, createdAt: true, updatedAt: true }
-                        }
+                            select: {
+                                id: true,
+                                email: true,
+                                name: true,
+                                createdAt: true,
+                                updatedAt: true,
+                            },
+                        },
                     },
-                    orderBy: { // Optional: order members
+                    orderBy: {
+                        // Optional: order members
                         joinedAt: 'asc',
-                    }
+                    },
                 },
-                timetables: { // Include associated timetables
-                    select: { // Select only the validFrom field
-                        validFrom: true
+                timetables: {
+                    // Include associated timetables
+                    select: {
+                        // Select only the validFrom field
+                        validFrom: true,
                     },
-                    orderBy: { // Order them to easily find the earliest
-                        validFrom: 'asc'
+                    orderBy: {
+                        // Order them to easily find the earliest
+                        validFrom: 'asc',
                     },
-                }
+                    // where: { validFrom: { not: null } } // Keep if validFrom is optional, remove if required
+                },
             },
         });
 
@@ -99,7 +109,11 @@ export const streamRepository = {
         });
     },
 
-    async addMember(userId: string, streamId: string, role: string = 'member'): Promise<StreamMembership> {
+    async addMember(
+        userId: string,
+        streamId: string,
+        role: string = 'member',
+    ): Promise<StreamMembership> {
         return prisma.streamMembership.create({
             data: {
                 userId,
@@ -119,28 +133,38 @@ export const streamRepository = {
             orderBy: {
                 stream: {
                     name: 'asc', // Order streams alphabetically
-                }
-            }
+                },
+            },
         });
     },
 
     async findStreamMembers(streamId: string): Promise<StreamMemberWithSelectedUser[]> {
         const result = await prisma.streamMembership.findMany({
-           where: { streamId },
-           include: {
-               user: { // Select specific user fields
-                   select: { id: true, email: true, name: true, createdAt: true, updatedAt: true }
-               }
-           },
-           orderBy: { joinedAt: 'asc' }
-       });
-       // Cast might be needed if TS inference isn't perfect, but ideally select matches the type
-       return result as StreamMemberWithSelectedUser[];
-   },
+            where: { streamId },
+            include: {
+                user: {
+                    // Select specific user fields
+                    select: { id: true, email: true, name: true, createdAt: true, updatedAt: true },
+                },
+            },
+            orderBy: { joinedAt: 'asc' },
+        });
+        // Cast might be needed if TS inference isn't perfect, but ideally select matches the type
+        return result as StreamMemberWithSelectedUser[];
+    },
+
+    // --- NEW: Method to get just member user IDs ---
+    async findStreamMemberUserIds(streamId: string): Promise<string[]> {
+        const members = await prisma.streamMembership.findMany({
+            where: { streamId },
+            select: { userId: true }, // Select only the userId
+        });
+        return members.map((m) => m.userId);
+    },
 
     async isUserMember(userId: string, streamId: string): Promise<boolean> {
         const count = await prisma.streamMembership.count({
-             where: { userId, streamId }
+            where: { userId, streamId },
         });
         return count > 0;
     },
@@ -150,8 +174,8 @@ export const streamRepository = {
             where: {
                 userId_streamId: { userId, streamId },
             },
-            select: { role: true } // Only select role
+            select: { role: true }, // Only select role
         });
         return membership?.role === 'admin';
-    }
+    },
 };
