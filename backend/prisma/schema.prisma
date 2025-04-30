@@ -1,0 +1,142 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  streamsOwned    Stream[]           @relation("StreamOwner")
+  streamMemberships StreamMembership[]
+  attendanceRecords AttendanceRecord[]
+  bulkEntries     BulkAttendanceEntry[]
+}
+
+model Stream {
+  id          String   @id @default(cuid())
+  name        String
+  streamCode  String   @unique @default(cuid()) // Simple unique code for joining
+  ownerId     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  owner       User               @relation("StreamOwner", fields: [ownerId], references: [id])
+  members     StreamMembership[]
+  timetables  Timetable[]
+  attendanceRecords AttendanceRecord[]
+  bulkEntries     BulkAttendanceEntry[]
+
+  @@index([ownerId])
+}
+
+// Join table for users and streams
+model StreamMembership {
+  id        String   @id @default(cuid())
+  userId    String
+  streamId  String
+  role      String   @default("member") // e.g., "admin", "member"
+  joinedAt  DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stream    Stream   @relation(fields: [streamId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, streamId])
+  @@index([userId])
+  @@index([streamId])
+}
+
+model Timetable {
+  id          String   @id @default(cuid())
+  streamId    String
+  name        String   // e.g., "Semester 1 Timetable"
+  validFrom   DateTime // Start date this timetable is active
+  validUntil  DateTime? // Optional end date
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  stream      Stream           @relation(fields: [streamId], references: [id], onDelete: Cascade)
+  entries     TimetableEntry[]
+
+  @@index([streamId])
+  @@index([validFrom])
+}
+
+model TimetableEntry {
+  id          String   @id @default(cuid())
+  timetableId String
+  dayOfWeek   Int      // ISO 8601 day of week (1 = Monday, 7 = Sunday)
+  subjectName String
+  courseCode  String?
+  startTime   String?  // Optional: e.g., "09:00"
+  endTime     String?  // Optional: e.g., "10:00"
+
+  timetable   Timetable @relation(fields: [timetableId], references: [id], onDelete: Cascade)
+
+  @@index([timetableId])
+  @@index([dayOfWeek])
+}
+
+// Represents a specific class instance on a specific date, derived from TimetableEntry
+// Could be implicitly calculated or explicitly stored if needed for complex overrides/notes
+// For simplicity here, we link AttendanceRecord directly to Stream/Subject/Date
+
+enum AttendanceStatus {
+  OCCURRED
+  CANCELLED
+  REPLACED
+  PENDING // Default before marking
+}
+
+model AttendanceRecord {
+  id          String   @id @default(cuid())
+  userId      String
+  streamId    String
+  subjectName String
+  courseCode  String?
+  classDate   DateTime // The specific date the class was scheduled/held
+  status      AttendanceStatus @default(PENDING)
+  markedAt    DateTime @updatedAt // When the status was last changed
+  markedByUserId String? // Optional: Who marked it (if needed)
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stream      Stream   @relation(fields: [streamId], references: [id], onDelete: Cascade)
+  // markedBy User? // If tracking who marked is needed
+
+  @@unique([userId, streamId, subjectName, classDate]) // Ensure one record per user/stream/subject/date
+  @@index([userId])
+  @@index([streamId])
+  @@index([classDate])
+}
+
+// For bulk entry feature
+model BulkAttendanceEntry {
+  id              String   @id @default(cuid())
+  userId          String
+  streamId        String
+  subjectName     String
+  courseCode      String?
+  attendedClasses Int      // Number of classes attended by the user for this subject
+  totalClasses    Int      // Total classes held for this subject (calculated at time of entry)
+  calculationDate DateTime @default(now()) // When this bulk entry was made/calculated
+  startDate       DateTime // Start date used for calculation
+  endDate         DateTime // End date used for calculation (usually current date)
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stream          Stream   @relation(fields: [streamId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([streamId])
+  @@index([subjectName])
+}

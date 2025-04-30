@@ -1,0 +1,14 @@
+node_modules
+# Keep environment variables out of version control
+.env
+# TypeScript output
+dist/
+build
+
+# Logs
+logs/
+*.log
+
+# OS/System files
+.DS_Store
+Thumbs.db

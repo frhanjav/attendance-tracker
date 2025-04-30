@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  postgres_db:
+    image: postgres:15-alpine
+    container_name: attendance_postgres_dev
+    environment:
+      POSTGRES_USER: devuser
+      POSTGRES_PASSWORD: devpassword
+      POSTGRES_DB: attendance_dev
+    ports:
+      - "5432:5432" # Expose DB port locally if needed for direct access
+    volumes:
+      - postgres_data:/var/lib/postgresql/data # Persist data
+    networks:
+      - attendance_net
+
+  backend:
+    container_name: attendance_backend_dev
+    build:
+      context: ./backend
+      dockerfile: Dockerfile # Use the production Dockerfile or a dev-specific one
+    # Use ts-node-dev for hot-reloading in development
+    command: npm run dev
+    volumes:
+      - ./backend/src:/app/src # Mount source code for hot-reloading
+      - ./backend/prisma:/app/prisma # Mount prisma folder
+      # Prevent node_modules from being overwritten by host volume
+      - /app/node_modules
+    ports:
+      - "3001:3001"
+    depends_on:
+      - postgres_db
+    environment:
+      # Use environment variables from .env file or define here
+      NODE_ENV: development
+      PORT: 3001
+      DATABASE_URL: postgresql://devuser:devpassword@postgres_db:5432/attendance_dev?schema=public
+      JWT_SECRET: "LOCAL_DEV_SECRET_CHANGE_ME"
+      JWT_EXPIRES_IN: "1d"
+      BCRYPT_SALT_ROUNDS: 10
+      FRONTEND_URL: http://localhost:5173
+    networks:
+      - attendance_net
+
+  frontend:
+    container_name: attendance_frontend_dev
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile # Use the production Dockerfile or a dev-specific one
+      # target: builder # If you only want to run the dev server from the build stage
+    # Use Vite dev server for hot-reloading
+    command: npm run dev -- --host # Need --host to expose outside container
+    volumes:
+      - ./frontend/src:/app/src # Mount source code
+      - ./frontend/public:/app/public
+      # Mount other config files if needed (tailwind.config.js, etc.)
+      - ./frontend/index.html:/app/index.html
+      - ./frontend/vite.config.ts:/app/vite.config.ts
+      - ./frontend/tsconfig.json:/app/tsconfig.json
+      - ./frontend/tailwind.config.js:/app/tailwind.config.js
+      - ./frontend/postcss.config.js:/app/postcss.config.js
+      # Prevent node_modules from being overwritten by host volume
+      - /app/node_modules
+    ports:
+      - "5173:5173" # Vite default port
+    environment:
+      # Vite reads .env files automatically, but you can override here
+      VITE_API_BASE_URL: http://localhost:3001/api/v1 # Point to backend service via localhost (from host perspective)
+      # Or use backend service name if accessing directly within docker network (less common for frontend dev)
+      # VITE_API_BASE_URL: http://backend:3001/api/v1
+    depends_on:
+      - backend
+    networks:
+      - attendance_net
+
+volumes:
+  postgres_data:
+
+networks:
+  attendance_net:
+    driver: bridge
