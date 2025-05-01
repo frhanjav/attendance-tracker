@@ -40,7 +40,6 @@ export interface CreateTimetableFrontendInput { // Input for create/update from 
 
 // Removed the transformSubjectsToEntries call and backendPayload creation within the updateTimetable function. It now sends the updateData (containing nested subjects) directly. Also added a similar check/log for createTimetable.
 
-// Keep the backend input type as before (flat entries)
 interface CreateTimetableBackendPayload {
     name: string;
     validFrom: string;

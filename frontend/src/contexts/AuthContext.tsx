@@ -10,88 +10,96 @@ export interface User {
 }
 
 interface AuthContextType {
-  user: User | null;
-  token: string | null;
-  isLoading: boolean; // Crucial for initial load/redirect logic
-  login: (token: string, userData: User) => void;
-  logout: () => void;
-  checkAuthStatus: () => Promise<void>; // Renamed for clarity
+    user: User | null;
+    isLoading: boolean; // Crucial for initial load/redirect logic
+    login: (userData: User) => void;
+    logout: () => Promise<void>; // Keep async if calling API
+    checkAuthStatus: () => Promise<void>; // Renamed for clarity
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem('authToken')); // Initialize from localStorage
-  const [isLoading, setIsLoading] = useState(true); // Start loading
+    const [user, setUser] = useState<User | null>(null);
+    // const [token, setToken] = useState<string | null>(() => localStorage.getItem('authToken')); // Initialize from localStorage
+    const [isLoading, setIsLoading] = useState(true); // Start loading
 
-  const login = useCallback((newToken: string, userData: User) => {
-    localStorage.setItem('authToken', newToken);
-    setToken(newToken);
-    setUser(userData);
-    console.log('AuthContext: User logged in', userData);
-  }, []);
+    const login = useCallback((userData: User) => {
+        setUser(userData);
+        console.log('AuthContext: User set after successful auth check/login', userData);
+    }, []);
 
-  const logout = useCallback(() => {
-    console.log('AuthContext: Logging out');
-    localStorage.removeItem('authToken');
-    setToken(null);
-    setUser(null);
-    // Navigation should happen in components/router based on context change
-  }, []);
-
-  const checkAuthStatus = useCallback(async () => {
-    console.log('AuthContext: Checking auth status...');
-    setIsLoading(true); // Ensure loading is true at the start
-    const currentToken = localStorage.getItem('authToken');
-    if (!currentToken) {
-        console.log('AuthContext: No token found.');
+    const logout = useCallback(async () => {
+        // Make logout async if calling API
+        console.log('AuthContext: Logging out');
+        // Remove token from localStorage if it was ever stored there (cleanup)
+        localStorage.removeItem('authToken');
+        // setToken(null); // Remove token state update
         setUser(null);
-        setToken(null); // Ensure token state is also null
-        setIsLoading(false);
-        return;
-    }
 
-    // Ensure token state matches localStorage if it exists
-    if (token !== currentToken) {
-        setToken(currentToken);
-    }
-
-    try {
-        // Use the apiClient which has the interceptor to add the token
-        // Adjust endpoint and response structure as needed
-        const response = await apiClient.get<{ status: string; data: { user: User } }>('/users/me');
-        if (response.data.status === 'success' && response.data.data.user) {
-            setUser(response.data.data.user);
-            console.log('AuthContext: Auth check successful', response.data.data.user);
-        } else {
-            console.log('AuthContext: Auth check failed (API success but no user data). Logging out.');
-            logout(); // Token might be invalid or user deleted
+        // --- Optional: Call backend logout endpoint to clear cookie ---
+        try {
+            // Assume you create a POST /api/v1/auth/logout endpoint on backend
+            // that clears the 'authToken' cookie
+            await apiClient.post('/auth/logout');
+            console.log('AuthContext: Logout API call successful');
+        } catch (error) {
+            console.error('AuthContext: Logout API call failed:', error);
+            // Proceed with frontend logout anyway
         }
-    } catch (error) {
-        console.error('AuthContext: Auth check API call failed:', error);
-        logout(); // Clear state on error (like 401 handled by interceptor, or other errors)
-    } finally {
-        // CRITICAL: Always set loading to false after check completes
-        console.log('AuthContext: Auth check finished.');
-        setIsLoading(false);
-    }
-  }, [logout, token]); // Depend on logout and token
+        // --- End Optional Backend Logout ---
 
-  // Run checkAuthStatus on initial mount
-  useEffect(() => {
-    checkAuthStatus();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run only once on mount
+        // Navigation should happen in components/router based on context change
+        // Or force redirect if needed: window.location.href = '/login';
+    }, []);
 
-  const value = useMemo(() => ({
-    user,
-    token,
-    isLoading,
-    login,
-    logout,
-    checkAuthStatus
-  }), [user, token, isLoading, login, logout, checkAuthStatus]);
+    const checkAuthStatus = useCallback(async () => {
+        console.log('AuthContext: Checking auth status via /users/me...');
+        setIsLoading(true); // Ensure loading is true at the start
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+        try {
+            // Use the apiClient which has the interceptor to add the token
+            // Adjust endpoint and response structure as needed
+            const response = await apiClient.get<{ status: string; data: { user: User } }>(
+                '/users/me',
+            );
+            if (response.data.status === 'success' && response.data.data.user) {
+                // Call the corrected login function just to set the user state
+                login(response.data.data.user);
+                // console.log('AuthContext: Auth check successful via API', response.data.data.user); // Log is inside login now
+            } else {
+                // This case might not be hit if API returns 401, which is caught below
+                console.log('AuthContext: Auth check failed (API success but no user data).');
+                setUser(null);
+            }
+        } catch (error: any) {
+            // The apiClient interceptor should handle 401 by redirecting.
+            // If any other error occurs (e.g., network error, 500), treat as logged out.
+            console.error('AuthContext: Auth check API call failed:', error.message);
+            setUser(null); // Clear user state on any error during check
+        } finally {
+            // CRITICAL: Always set loading to false after check completes
+            console.log('AuthContext: Auth check finished.');
+            setIsLoading(false);
+        }
+          // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [login]);
+
+    // Run checkAuthStatus on initial mount
+    useEffect(() => {
+        checkAuthStatus();
+    }, [checkAuthStatus]); // checkAuthStatus is memoized by useCallback
+
+    const value = useMemo(
+        () => ({
+            user,
+            isLoading,
+            login,
+            logout,
+            checkAuthStatus,
+        }),
+        [user, isLoading, login, logout, checkAuthStatus],
+    );
+
+    return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

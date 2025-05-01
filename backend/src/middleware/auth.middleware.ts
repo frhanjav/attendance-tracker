@@ -3,67 +3,79 @@ import jwt from 'jsonwebtoken';
 import { config } from '../config';
 import { UnauthorizedError } from '../core/errors';
 import prisma from '../infrastructure/prisma';
+import { User } from '@prisma/client'; // Import the full User type
 
 interface JwtPayload {
-  id: string;
+    id: string;
 }
 
-// Extend Express Request type
-declare global {
-    namespace Express {
-        interface Request {
-            user?: { id: string }; // Add user property
-        }
-    }
-}
-
+// // Extend Express Request type
+// declare global {
+//     namespace Express {
+//         interface Request {
+//             user?: { id: string }; // Add user property
+//         }
+//     }
+// }
 
 export const protect = async (req: Request, res: Response, next: NextFunction) => {
-  let token;
+    let token;
 
-  // 1) Getting token and check if it's there
-  if (
-    req.headers.authorization &&
-    req.headers.authorization.startsWith('Bearer')
-  ) {
-    token = req.headers.authorization.split(' ')[1];
-  }
-  // TODO: Add support for token in cookies if preferred
-
-  if (!token) {
-    return next(new UnauthorizedError('You are not logged in! Please log in to get access.'));
-  }
-
-  try {
-    // 2) Verification token
-    const decoded = jwt.verify(token, config.jwtSecret) as JwtPayload;
-
-    // 3) Check if user still exists
-    const currentUser = await prisma.user.findUnique({
-      where: { id: decoded.id },
-      select: { id: true } // Only select necessary fields
-    });
-
-    if (!currentUser) {
-      return next(new UnauthorizedError('The user belonging to this token does no longer exist.'));
+    // --- Strategy 1: Check for JWT in HttpOnly Cookie ---
+    if (req.cookies?.authToken) {
+        token = req.cookies.authToken;
+        console.log('[Protect Middleware] Found token in cookie.'); // Optional log
     }
 
-    // 4) Check if user changed password after the token was issued (Optional but recommended)
-    // Add a passwordChangedAt field to User model if implementing this
+    // --- Strategy 2: Fallback to Authorization Header (Optional) ---
+    // Keep this if you want to support Bearer tokens for other clients (e.g., mobile app)
+    else if (req.headers.authorization?.startsWith('Bearer')) {
+        token = req.headers.authorization.split(' ')[1];
+        console.log('[Protect Middleware] Found token in Authorization header.'); // Optional log
+    }
 
-    // GRANT ACCESS TO PROTECTED ROUTE
-    req.user = { id: currentUser.id }; // Attach user ID to the request
-    next();
-  } catch (err) {
-      if (err instanceof jwt.JsonWebTokenError) {
-          return next(new UnauthorizedError('Invalid token. Please log in again.'));
-      }
-      if (err instanceof jwt.TokenExpiredError) {
-          return next(new UnauthorizedError('Your token has expired! Please log in again.'));
-      }
-      // Forward other errors
-      next(err);
-  }
+    if (!token) {
+        console.log('[Protect Middleware] No token found.'); // Optional log
+        return next(new UnauthorizedError('You are not logged in! Please log in to get access.'));
+    }
+
+    try {
+        // Verify token using the JWT secret
+        const decoded = jwt.verify(token, config.jwtSecret) as JwtPayload;
+
+        // Check if user still exists (minimal check)
+        // Consider selecting more fields if needed downstream, or fetching full user later
+        const currentUser = await prisma.user.findUnique({
+            where: { id: decoded.id },
+            select: { id: true, emailVerified: true }, // Check if email is verified too
+        });
+
+        if (!currentUser) {
+            return next(
+                new UnauthorizedError('The user belonging to this token no longer exists.'),
+            );
+        }
+
+        // --- Optional: Check if email is verified ---
+        // If using email verification, enforce it here for API access
+        // if (!currentUser.emailVerified) {
+        //   return next(new UnauthorizedError('Please verify your email address to access this resource.'));
+        // }
+
+        // Attach user ID to request object
+        req.user = currentUser;
+        next(); // Grant access
+    } catch (err) {
+        console.error('[Protect Middleware] Token verification failed:', err); // Log error
+        if (err instanceof jwt.JsonWebTokenError) {
+            return next(new UnauthorizedError('Invalid token. Please log in again.'));
+        }
+        if (err instanceof jwt.TokenExpiredError) {
+            return next(new UnauthorizedError('Your token has expired! Please log in again.'));
+        }
+        // Forward other unexpected errors
+        next(err);
+    }
 };
 
 // Optional: Middleware to restrict access based on role
