@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express'; // Import Request, Response
+import { Router, Request, Response, NextFunction } from 'express'; // Import NextFunction
 import passport from '../config/passport'; // Import configured passport
 import jwt from 'jsonwebtoken'; // To generate JWT after successful OAuth
 import { config } from '../config'; // For JWT secret/expiry
@@ -13,7 +13,6 @@ import { protect } from '../middleware/auth.middleware';
 import { z } from 'zod'; // Import Zod for schema validation
 
 // Import DTOs/Schemas for validation
-import { CreateUserSchema, LoginUserSchema } from '../domains/user/user.dto';
 import { CreateStreamSchema, JoinStreamSchema } from '../domains/stream/stream.dto';
 import {
     TimetableBodySchema,
@@ -37,12 +36,7 @@ router.get('/health', (req: Request, res: Response): void => {
     res.status(200).json({ status: 'ok' });
 });
 
-// --- Auth Routes ---
-// router.post('/auth/signup', validateRequest(CreateUserSchema), userController.signup);
-// router.post('/auth/login', validateRequest(LoginUserSchema), userController.login);
-
 // --- Google OAuth Routes ---
-
 // Route to initiate Google authentication
 router.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
 
@@ -88,6 +82,26 @@ router.get(
         }
     },
 );
+
+// --- NEW: Logout Route ---
+router.post('/auth/logout', (req: Request, res: Response, next: NextFunction) => {
+  console.log('[Auth Logout] Received logout request');
+  try {
+      // Clear the HttpOnly cookie by setting it with an expired date
+      res.cookie('authToken', '', { // Set value to empty string
+          httpOnly: true,
+          expires: new Date(0), // Set expiry date to the past
+          secure: config.nodeEnv === 'production',
+          sameSite: config.nodeEnv === 'production' ? 'lax' : undefined,
+          path: '/',
+      });
+      res.status(200).json({ status: 'success', message: 'Logged out successfully' });
+  } catch (error) {
+      // Pass any unexpected errors to the global handler
+      next(error);
+  }
+});
+// --- End Logout Route ---
 
 // --- Protected Routes (Require Authentication) ---
 router.use(protect); // Apply auth middleware to all subsequent routes

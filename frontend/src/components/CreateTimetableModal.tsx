@@ -1,19 +1,20 @@
 // frontend/src/components/CreateTimetableModal.tsx
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useForm, useFieldArray, Controller } from 'react-hook-form'; // Ensure imports
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { timetableService, TimetableOutput, TimetableBasicInfo } from '../services/timetable.service'; // Import service and types
+import { timetableService, TimetableOutput, TimetableBasicInfo, CreateTimetableFrontendInput } from '../services/timetable.service';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '../components/ui/dialog';
-import { PlusCircle, Import, Loader2 } from 'lucide-react';
+import { Trash2, PlusCircle, Import, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { parseISO, format} from 'date-fns';
-import { SubjectInputBlockProps, SubjectInputBlock } from '../pages/TimetableDetailPage'; 
+import { SubjectInputBlockProps, SubjectInputBlock } from '../pages/TimetableDetailPage';
+import { ApiError } from '../lib/apiClient'; // Import the standardized ApiError type
 
 
 // --- Zod Schemas (Define or Import) ---
@@ -106,21 +107,38 @@ const CreateTimetableModal: React.FC<CreateTimetableModalProps> = ({ isOpen, onC
     }, [timetableToImport, reset]);
 
     // --- Create Mutation ---
-    const createTimetableMutation = useMutation({
+    const createTimetableMutation = useMutation<TimetableOutput, Error, { streamId: string } & CreateTimetableFrontendInput>({
         mutationFn: timetableService.createTimetable,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['timetables', streamId] }); // Invalidate old list query if still used
-            queryClient.invalidateQueries({ queryKey: ['timetableList', streamId] }); // Invalidate import list
-            queryClient.invalidateQueries({ queryKey: ['weeklySchedule', streamId] }); // Invalidate weekly view
-            reset();
+            // Invalidate relevant queries
+            queryClient.invalidateQueries({ queryKey: ['timetables', streamId] });
+            queryClient.invalidateQueries({ queryKey: ['timetableList', streamId] });
+            queryClient.invalidateQueries({ queryKey: ['weeklySchedule', streamId] }); // Invalidate viewer on main page
+            queryClient.invalidateQueries({ queryKey: ['attendanceWeek', streamId] }); // Invalidate attendance page week view
+            queryClient.invalidateQueries({ queryKey: ['streamAnalytics', streamId] }); // Invalidate analytics
+
+            reset(); // Reset form
             setFormError(null);
-            onClose(); // Close modal on success
+            onClose(); // Close modal
             toast.success("Timetable created successfully!");
         },
-        onError: (error: Error) => {
-            setFormError(error.message || "Failed to create timetable.");
-            toast.error(`Error: ${error.message}`);
+        // --- CORRECTED onError ---
+        onError: (error: Error | ApiError) => { // Expect Error or our custom ApiError
+            console.error("Create Timetable Mutation failed:", error);
+            let displayMessage = "An unknown error occurred.";
+
+            // Check if it's our standardized ApiError from the interceptor
+            if (error && typeof error === 'object' && 'message' in error) {
+                 // It might be ApiError OR a standard Error with a message
+                 // Prioritize the message property if it exists
+                 displayMessage = (error as ApiError).message;
+            }
+            // No need for instanceof Error check if the primary check covers it
+
+            setFormError(displayMessage); // Set local form error state if desired
+            toast.error(`Failed to create timetable: ${displayMessage}`);
         },
+        // --- End Correction ---
     });
 
     // --- Form Submit Handler ---
@@ -212,7 +230,10 @@ const CreateTimetableModal: React.FC<CreateTimetableModalProps> = ({ isOpen, onC
                     </div>
 
                     {/* Form Error Display */}
-                    {formError && ( <div className="text-red-600 text-sm mt-4">{formError}</div> )}
+                    {formError && (
+                         <p className="text-sm text-red-600 bg-red-50 p-3 rounded border border-red-200">{formError}</p>
+                    )}
+
 
                      {/* Footer with Submit Button */}
                     <DialogFooter className="mt-6 pt-4 border-t">

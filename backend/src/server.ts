@@ -20,6 +20,16 @@ if (config.nodeEnv === 'production') {
     app.set('trust proxy', 1);
 }
 
+// --- Handle Uncaught Exceptions ---
+// Should be placed early, but after essential imports/setup
+process.on('uncaughtException', (err: Error) => {
+  console.error('UNCAUGHT EXCEPTION! 💥 Shutting down...');
+  console.error(err.name, err.message);
+  console.error(err.stack);
+  // In production, log the error to your logging service here
+  process.exit(1); // Mandatory shutdown after uncaught exception
+});
+
 // --- Global Middleware ---
 
 // CORS Setup
@@ -85,12 +95,16 @@ const server = app.listen(config.port, () => {
 
 // --- Process Event Handlers ---
 // --- Handle Unhandled Rejections ---
-process.on('unhandledRejection', (err: Error) => {
+process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
   console.error('UNHANDLED REJECTION! 💥 Shutting down...');
-  console.error(err.name, err.message);
+  console.error('Reason:', reason?.stack || reason); // Log the reason/stack
+  // In production, log the error to your logging service here
+  // Graceful shutdown:
   server.close(() => {
-    process.exit(1); // Exit process after server closes
+    process.exit(1);
   });
+  // Force shutdown if server doesn't close quickly (optional)
+  setTimeout(() => process.exit(1), 5000).unref();
 });
 
 // --- Handle SIGTERM (e.g., from Docker/Kubernetes) ---

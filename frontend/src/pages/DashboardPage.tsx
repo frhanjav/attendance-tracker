@@ -73,7 +73,7 @@ const DashboardPage: React.FC = () => {
                                 <CardContent className="flex-grow">
                                     {/* Placeholder for quick info like member count or next class */}
                                     <p className="text-sm text-gray-500 italic">
-                                        Quick info placeholder...
+                                        Keep Tracking
                                     </p>
                                 </CardContent>
                                 <CardFooter>

@@ -10,23 +10,6 @@ export const UserSchema = z.object({
   updatedAt: z.date(),
 });
 
-export const CreateUserSchema = z.object({
-  body: z.object({
-    email: z.string().email({ message: 'Invalid email address' }),
-    password: z.string().min(8, { message: 'Password must be at least 8 characters long' }),
-    name: z.string().min(1, { message: 'Name is required' }).optional(),
-  }),
-});
-export type CreateUserInput = z.infer<typeof CreateUserSchema>['body'];
-
-export const LoginUserSchema = z.object({
-    body: z.object({
-        email: z.string().email({ message: 'Invalid email address' }),
-        password: z.string().min(1, { message: 'Password is required' }),
-    }),
-});
-export type LoginUserInput = z.infer<typeof LoginUserSchema>['body'];
-
 // Output DTOs (excluding sensitive data like password)
 export const UserOutputSchema = UserSchema.omit({ password: true });
 export type UserOutput = z.infer<typeof UserOutputSchema>;

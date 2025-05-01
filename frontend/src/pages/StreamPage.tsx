@@ -48,11 +48,10 @@ const StreamPage: React.FC = () => {
                 </Link>
             </div>
 
-            <div className="bg-white p-6 rounded-lg shadow mb-6">
+            {/* <div className="bg-white p-6 rounded-lg shadow mb-6">
                 <h2 className="text-xl font-semibold mb-4">Stream Details</h2>
                 <p><strong>Owner:</strong> {stream.owner.name} ({stream.owner.email})</p>
-                {/* Add more details if needed */}
-            </div>
+            </div> */}
 
              <div className="bg-white p-6 rounded-lg shadow mb-6">
                 <h2 className="text-xl font-semibold mb-4">Members ({stream.members.length})</h2>
