@@ -1,4 +1,5 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
+import helmet from 'helmet'; // Import helmet
 import cors from 'cors';
 import session from 'express-session';
 import passport from './config/passport'; // Import configured passport
@@ -19,6 +20,34 @@ const app: Express = express();
 if (config.nodeEnv === 'production') {
     app.set('trust proxy', 1);
 }
+
+// --- Apply Helmet Middleware (EARLY) ---
+// Use default settings first, then customize if needed
+app.use(
+  helmet({
+    // Example: Customize Content Security Policy
+    contentSecurityPolicy: {
+      directives: {
+        ...helmet.contentSecurityPolicy.getDefaultDirectives(), // Start with defaults
+        "script-src": ["'self'", "trusted-cdn.com"], // Allow scripts from self and trusted CDN
+        "img-src": ["'self'", "data:", "images.google.com"], // Allow images from self, data URIs, Google
+        // Add other directives as needed (style-src, connect-src, etc.)
+      },
+    },
+    // Example: Relax referrer policy if needed (default is strict-origin-when-cross-origin)
+    // referrerPolicy: { policy: "no-referrer" },
+    // Example: Configure HSTS (only if using HTTPS)
+    // strictTransportSecurity: {
+    //   maxAge: 15552000, // 180 days in seconds
+    //   includeSubDomains: true,
+    //   preload: true, // Submit to HSTS preload list (requires careful setup)
+    // },
+    // Example: Allow embedding in iframes from specific origins (default is DENY)
+    // crossOriginEmbedderPolicy: false, // Or configure specific policies
+    // xFrameOptions: { action: "SAMEORIGIN" }, // Allow framing only by your own origin
+  })
+);
+// --- End Helmet ---
 
 // --- Handle Uncaught Exceptions ---
 // Should be placed early, but after essential imports/setup
