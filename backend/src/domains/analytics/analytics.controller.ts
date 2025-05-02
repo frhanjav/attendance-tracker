@@ -2,13 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { analyticsService } from './analytics.service';
 import { AttendanceCalculatorInput } from './analytics.dto';
 import { ParsedQs } from 'qs';
-
-// Define a minimal type for what 'protect' middleware guarantees on req.user
-interface AuthenticatedUser {
-    id: string;
-    // Add other fields if your protect middleware attaches them and you need them
-    // emailVerified?: boolean;
-}
+import { AuthenticatedUser } from '@/middleware/auth.middleware';
 
 export const analyticsController = {
     async handleGetStreamAnalytics(

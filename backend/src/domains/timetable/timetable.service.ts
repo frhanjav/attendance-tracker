@@ -191,7 +191,11 @@ export const timetableService = {
     async calculateScheduledClasses(streamId: string, startDate: Date, endDate: Date, userId: string): Promise<Record<string, number>> {
         // This function needs the same optimization as getWeeklySchedule
         console.log(`[Timetable Service BE] Calculating scheduled classes count for analytics...`);
-        const potentiallyActiveTimetables: TimetableWithEntries[] = await prisma.timetable.findMany({ /* ... same query as getWeeklySchedule ... */ });
+        const potentiallyActiveTimetables: TimetableWithEntries[] = await prisma.timetable.findMany({
+            where: { streamId, validFrom: { lte: endDate }, OR: [ { validUntil: null }, { validUntil: { gte: startDate } } ] },
+            include: { entries: true }, // <-- ADD THIS INCLUDE
+            orderBy: { validFrom: 'desc' }
+        });
         const scheduledCounts: Record<string, number> = {};
         const days = getDaysInInterval(startDate, endDate);
         for (const day of days) {

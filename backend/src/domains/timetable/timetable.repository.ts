@@ -48,6 +48,14 @@ export const timetableRepository = {
         });
     },
 
+    async findByStream(streamId: string): Promise<(Timetable & { entries: TimetableEntry[] })[]> {
+        return prisma.timetable.findMany({
+            where: { streamId },
+            include: { entries: true }, // Make sure to include entries
+            orderBy: { validFrom: 'desc' },
+        });
+    },
+
     // --- FIND MANY FOR STREAM (For Import List) ---
      async findManyForStream(streamId: string): Promise<Pick<Timetable, 'id' | 'name' | 'validFrom' | 'validUntil'>[]> {
         return prisma.timetable.findMany({

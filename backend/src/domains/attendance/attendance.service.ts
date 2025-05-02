@@ -1,4 +1,3 @@
-// backend/src/domains/attendance/attendance.service.ts
 import { attendanceRepository } from './attendance.repository';
 import { timetableService } from '../timetable/timetable.service';
 import { streamService } from '../stream/stream.service';

@@ -3,6 +3,7 @@ import { timetableService } from './timetable.service';
 import { CreateTimetableFrontendInput } from './timetable.dto';
 import { ParsedQs } from 'qs'; // For typed query params
 import { z } from 'zod'; // Import Zod if needed
+import { AuthenticatedUser } from '@/middleware/auth.middleware';
 
 // Define schema for weekly schedule query params if not using validateRequest middleware
 const weeklyScheduleQuerySchema = z.object({
@@ -14,7 +15,9 @@ export const timetableController = {
     // --- Create Timetable (Uses new schema/service input) ---
     async handleCreateTimetable(req: Request<{ streamId: string }, {}, CreateTimetableFrontendInput>, res: Response, next: NextFunction) {
         try {
-            const userId = req.user!.id;
+            const user = req.user as AuthenticatedUser;
+            if (!user?.id) throw new Error("Authentication error");
+            const userId = user.id;
             const streamId = req.params.streamId;
             // Service now expects the nested structure directly from req.body
             const timetable = await timetableService.createTimetable(streamId, req.body, userId);
@@ -26,7 +29,9 @@ export const timetableController = {
 
     async handleGetTimetables(req: Request<{ streamId: string }>, res: Response, next: NextFunction) {
         try {
-            const userId = req.user!.id;
+            const user = req.user as AuthenticatedUser;
+            if (!user?.id) throw new Error("Authentication error");
+            const userId = user.id;
             const streamId = req.params.streamId;
             const timetables = await timetableService.getTimetablesForStream(streamId, userId);
             res.status(200).json({ status: 'success', results: timetables.length, data: { timetables } });
@@ -38,7 +43,9 @@ export const timetableController = {
     // Example: Get the timetable active on a specific date
     async handleGetActiveTimetable(req: Request<{ streamId: string }, {}, {}, { date?: string } & ParsedQs>, res: Response, next: NextFunction): Promise<void> {
         try {
-            const userId = req.user!.id;
+            const user = req.user as AuthenticatedUser;
+            if (!user?.id) throw new Error("Authentication error");
+            const userId = user.id;
             const streamId = req.params.streamId;
             const dateString = req.query.date;
 
@@ -69,7 +76,9 @@ export const timetableController = {
     // --- NEW: Get Timetable Details ---
     async handleGetTimetableDetails(req: Request<{ timetableId: string }>, res: Response, next: NextFunction) {
         try {
-            const userId = req.user!.id;
+            const user = req.user as AuthenticatedUser;
+            if (!user?.id) throw new Error("Authentication error");
+            const userId = user.id;
             const timetableId = req.params.timetableId;
             const timetable = await timetableService.getTimetableDetails(timetableId, userId);
             res.status(200).json({ status: 'success', data: { timetable } });
@@ -81,7 +90,9 @@ export const timetableController = {
     // --- NEW: Get Timetable List for Import ---
     async handleGetTimetableListForImport(req: Request<{ streamId: string }>, res: Response, next: NextFunction) {
         try {
-            const userId = req.user!.id;
+            const user = req.user as AuthenticatedUser;
+            if (!user?.id) throw new Error("Authentication error");
+            const userId = user.id;
             const streamId = req.params.streamId;
             const timetableList = await timetableService.getTimetableListForImport(streamId, userId);
             res.status(200).json({ status: 'success', results: timetableList.length, data: { timetables: timetableList } });
@@ -97,7 +108,9 @@ export const timetableController = {
         next: NextFunction
     ) {
          try {
-            const userId = req.user!.id; // User requesting the view
+            const user = req.user as AuthenticatedUser;
+            if (!user?.id) throw new Error("Authentication error");
+            const userId = user.id;
             const streamId = req.params.streamId;
             // Validation handled by middleware
             const { startDate, endDate } = req.query as { startDate: string, endDate: string };

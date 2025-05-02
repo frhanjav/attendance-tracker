@@ -1,141 +1,91 @@
+// frontend/src/services/timetable.service.ts
 import apiClient from '../lib/apiClient';
-import { TimetableEntry } from '@prisma/client';
+import { format, parseISO } from 'date-fns';
 
-// Define types matching backend DTOs
-// interface TimetableEntryInput {
-//     dayOfWeek: number;
-//     subjectName: string;
-//     courseCode?: string | null; // Match backend expectation (null)
-//     startTime?: string | null;
-//     endTime?: string | null;
-// }
+// --- Exported Types for Frontend Usage ---
 
-// interface CreateTimetableInput {
-//     name: string;
-//     validFrom: string; // Send as ISO string or YYYY-MM-DD
-//     validUntil?: string | null;
-//     entries: TimetableEntryInput[];
-// }
-
-// --- Ensure these types match your form/backend DTOs ---
-export interface TimeSlot { // Represents a single time slot in the nested structure
+export interface TimeSlotInput {
     dayOfWeek: number;
     startTime?: string;
     endTime?: string;
 }
 
-export interface SubjectInput { // Represents a subject in the nested structure
-    subjectName: string;
+export interface SubjectInput {
+    subjectName: string; // REQUIRED
     courseCode?: string;
-    timeSlots: TimeSlot[];
+    timeSlots: TimeSlotInput[];
 }
 
-// Define the input type matching the new form schema
-export interface CreateTimetableFrontendInput { // Input for create/update from frontend form
+// Input type for create/update PAYLOAD SENT TO BACKEND SERVICE
+// This structure matches the form state and backend DTO validation schema
+export interface CreateTimetableFrontendInput {
     name: string;
-    validFrom: string;
-    validUntil?: string | null;
-    subjects: SubjectInput[];
+    validFrom: string; // YYYY-MM-DD string
+    validUntil?: string | null; // YYYY-MM-DD string, empty string, or null
+    subjects: SubjectInput[]; // Use the SubjectInput type (subjectName is required)
 }
 
-// Removed the transformSubjectsToEntries call and backendPayload creation within the updateTimetable function. It now sends the updateData (containing nested subjects) directly. Also added a similar check/log for createTimetable.
-
-interface CreateTimetableBackendPayload {
-    name: string;
-    validFrom: string;
-    validUntil?: string | null;
-    entries: Array<{
-        dayOfWeek: number;
-        subjectName: string;
-        courseCode?: string | null;
-        startTime?: string | null;
-        endTime?: string | null;
-    }>;
-}
-
-export interface TimetableOutput { // Match backend TimetableOutput DTO
+// Type for the full timetable object RETURNED FROM BACKEND API
+export interface TimetableOutput {
     id: string;
     streamId: string;
     name: string;
-    validFrom: string; // Or Date if you parse on frontend
-    validUntil: string | null; // Or Date | null
-    createdAt: string; // Or Date
-    updatedAt: string; // Or Date
+    validFrom: string; // ISO String from backend
+    validUntil: string | null; // ISO String or null from backend
+    createdAt: string; // ISO String from backend
+    updatedAt?: string; // ISO String (if applicable)
     entries: Array<{
         id: string;
         timetableId: string;
         dayOfWeek: number;
         subjectName: string;
-        courseCode?: string | null;
-        startTime?: string | null;
-        endTime?: string | null;
+        courseCode: string | null;
+        startTime: string | null;
+        endTime: string | null;
     }>;
 }
 
-export interface TimetableBasicInfo { // For import list
+// Type for basic timetable info RETURNED FROM BACKEND API (for import list)
+export interface TimetableBasicInfo {
     id: string;
     name: string;
     validFrom: string; // ISO String
     validUntil: string | null; // ISO String or null
 }
-export interface WeeklyScheduleEntry { // For timetable viewer
-    // id: string; // Maybe remove if not stable/needed
+
+// Type for weekly schedule entry RETURNED FROM BACKEND API
+export interface WeeklyScheduleEntry {
     date: string; // YYYY-MM-DD
     dayOfWeek: number;
     subjectName: string;
     courseCode: string | null;
     startTime: string | null;
     endTime: string | null;
-    status: 'SCHEDULED' | 'CANCELLED'; // Global status
+    status: 'SCHEDULED' | 'CANCELLED'; // Global status from backend
 }
-
-interface TimetableListResponse {
-    status: string;
-    results: number;
-    data: { timetables: TimetableOutput[] };
-}
-interface TimetableBasicListResponse { status: string; results: number; data: { timetables: TimetableBasicInfo[] }; } // For import list
-
-interface TimetableCreateResponse {
-    status: string;
-    data: { timetable: TimetableOutput };
-}
-
-interface TimetableUpdateResponse { // Define response type for update
-    status: string;
-    data: { timetable: TimetableOutput };
-}
-
-interface WeeklyScheduleResponse { status: string; data: { schedule: WeeklyScheduleEntry[] }; } // For weekly view
-
-// --- End Types ---
+// --- End Exported Types ---
 
 
-type FlatTimetableEntryInput = Omit<TimetableEntry, 'id' | 'timetableId'>;
+// Internal types for API response structures
+interface TimetableListResponse { status: string; results: number; data: { timetables: TimetableOutput[] }; }
+interface TimetableBasicListResponse { status: string; results: number; data: { timetables: TimetableBasicInfo[] }; }
+interface TimetableCreateResponse { status: string; data: { timetable: TimetableOutput }; }
+interface WeeklyScheduleResponse { status: string; data: { schedule: WeeklyScheduleEntry[] }; }
 
-// Helper function to transform nested subjects to flat entries
-const transformSubjectsToEntries = (subjects: CreateTimetableFrontendInput['subjects']): FlatTimetableEntryInput[] => {
-    const entries: FlatTimetableEntryInput[] = [];
-    subjects.forEach(subject => {
-        subject.timeSlots.forEach(slot => {
-            entries.push({
-                dayOfWeek: slot.dayOfWeek,
-                subjectName: subject.subjectName,
-                // Map empty strings/undefined from frontend to null for DB consistency
-                courseCode: subject.courseCode || null,
-                startTime: slot.startTime || null,
-                endTime: slot.endTime || null,
-            });
-        });
-    });
-    return entries;
-};
 
+// --- REMOVED CreateTimetableBackendPayload type ---
+// --- REMOVED transformSubjectsToEntries helper function ---
+
+
+// --- Service Object ---
 export const timetableService = {
-    // --- Get List for Import ---
+
     getTimetableListForImport: async (streamId: string): Promise<TimetableBasicInfo[]> => {
         try {
             const response = await apiClient.get<TimetableBasicListResponse>(`/timetables/list/${streamId}`);
+            if (response.data?.status !== 'success' || !response.data?.data?.timetables) {
+                 throw new Error("Invalid API response structure for timetable list.");
+            }
             return response.data.data.timetables;
         } catch (error: any) {
             console.error(`Error fetching timetable list for stream ${streamId}:`, error);
@@ -143,24 +93,25 @@ export const timetableService = {
         }
     },
 
-    // --- Get Timetable Details (for import population) ---
     getTimetableDetails: async (timetableId: string): Promise<TimetableOutput> => {
-        try {
+         try {
             const response = await apiClient.get<{ status: string; data: { timetable: TimetableOutput } }>(`/timetables/${timetableId}`);
+             if (response.data?.status !== 'success' || !response.data?.data?.timetable) {
+                 throw new Error("Invalid API response structure for timetable details.");
+            }
             return response.data.data.timetable;
         } catch (error: any) {
-            console.error(`Error fetching timetable details ${timetableId}:`, error);
-            throw new Error(error.message || 'Failed to fetch timetable details');
+             console.error(`Error fetching timetable details ${timetableId}:`, error);
+             throw new Error(error.message || 'Failed to fetch timetable details');
         }
     },
 
-    // --- Get Weekly Schedule (for viewer) ---
     getWeeklySchedule: async (streamId: string, startDate: string, endDate: string): Promise<WeeklyScheduleEntry[]> => {
-        try {
+         try {
             const response = await apiClient.get<WeeklyScheduleResponse>(`/timetables/weekly/${streamId}`, {
                 params: { startDate, endDate }
             });
-            if (response.data?.status !== 'success' || !response.data?.data?.schedule) {
+             if (response.data?.status !== 'success' || !response.data?.data?.schedule) {
                 throw new Error("Invalid API response structure for weekly schedule.");
             }
             return response.data.data.schedule;
@@ -171,12 +122,22 @@ export const timetableService = {
     },
 
     // --- Create Timetable ---
+    // Accepts the nested structure and SENDS IT DIRECTLY to the backend
     createTimetable: async (data: { streamId: string } & CreateTimetableFrontendInput): Promise<TimetableOutput> => {
         const { streamId, ...payload } = data;
-        const createPayload = { ...payload, validUntil: payload.validUntil || null };
-        console.log("Payload sent to backend for CREATE (nested):", createPayload);
+        // Prepare payload, ensuring validUntil is null if empty string
+        const createPayload = {
+            ...payload,
+            validUntil: payload.validUntil || null,
+        };
+        console.log("Payload sent to backend for CREATE (nested):", createPayload); // Log the actual payload being sent
         try {
+            // Backend endpoint /streams/:streamId/timetables expects the nested structure in the body
+            // because its validation schema (TimetableBodySchema) expects 'subjects'
             const response = await apiClient.post<TimetableCreateResponse>(`/streams/${streamId}/timetables`, createPayload);
+             if (response.data?.status !== 'success' || !response.data?.data?.timetable) {
+                 throw new Error("Invalid API response structure for create timetable.");
+            }
             return response.data.data.timetable;
         } catch (error: any) {
             console.error(`Error creating timetable for stream ${streamId}:`, error);

@@ -2,6 +2,7 @@ import { streamRepository, StreamWithDetailsAndTimetables, StreamMemberWithSelec
 import { CreateStreamInput, JoinStreamInput, StreamBasicOutput, StreamDetailedOutput, StreamMemberOutput } from './stream.dto';
 import { NotFoundError, BadRequestError, ForbiddenError } from '../../core/errors';
 import { UserOutput } from '../user/user.dto'; // Assuming UserOutput type exists
+import { Stream, User } from '@prisma/client'; // <-- Import Stream and User
 
 
 // --- Update StreamDetailedOutput DTO ---

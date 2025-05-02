@@ -198,7 +198,7 @@ const TimetableViewer: React.FC<TimetableViewerProps> = ({ streamId, isAdmin }) 
                                         return (
                                             <div
                                                 key={`${entry.subjectName}-${index}`}
-                                                className={`border-l-4 pl-2 py-1 ${isCancelled ? 'border-red-300 bg-red-50/60' : entry.status === 'REPLACED' ? 'border-yellow-300 bg-yellow-50/60' : 'border-blue-300'}`}
+                                                className={`border-l-4 pl-2 py-1 ${isCancelled ? 'border-red-300 bg-red-50/60' : 'border-blue-300'}`}
                                             >
                                                 <div className="flex justify-between items-start">
                                                     <div>

@@ -1,5 +1,3 @@
-// backend/src/domains/analytics/analytics.service.ts
-
 import { attendanceRepository } from '../attendance/attendance.repository';
 import { streamService } from '../stream/stream.service';
 // Import DTOs and ensure field names match (e.g., totalHeldClasses)
@@ -111,7 +109,7 @@ export const analyticsService = {
 
             subjectStats.push({
                 subjectName,
-                courseCode: subjectInfo.courseCode,
+                courseCode: subjectInfo.courseCode ?? null,
                 totalScheduled,
                 totalMarked,
                 totalHeldClasses: totalHeld, // Use the DTO field name (assuming it's totalHeldClasses)

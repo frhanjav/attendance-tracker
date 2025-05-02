@@ -1,11 +1,14 @@
 import { Request, Response, NextFunction } from 'express';
 import { streamService } from './stream.service';
 import { CreateStreamInput, JoinStreamInput } from './stream.dto';
+import { AuthenticatedUser } from '@/middleware/auth.middleware';
 
 export const streamController = {
     async handleCreateStream(req: Request<{}, {}, CreateStreamInput>, res: Response, next: NextFunction) {
         try {
-            const ownerId = req.user!.id; // User ID from auth middleware
+            const owner = req.user as AuthenticatedUser;
+            if (!owner?.id) throw new Error("Authentication error");
+            const ownerId = owner.id;
             const stream = await streamService.createStream(req.body, ownerId);
             res.status(201).json({ status: 'success', data: { stream } });
         } catch (error) {
@@ -15,7 +18,9 @@ export const streamController = {
 
     async handleJoinStream(req: Request<{}, {}, JoinStreamInput>, res: Response, next: NextFunction) {
         try {
-            const userId = req.user!.id;
+            const user = req.user as AuthenticatedUser;
+            if (!user?.id) throw new Error("Authentication error");
+            const userId = user.id;
             const stream = await streamService.joinStream(req.body, userId);
             res.status(200).json({ status: 'success', data: { stream } });
         } catch (error) {
@@ -25,7 +30,9 @@ export const streamController = {
 
     async handleGetMyStreams(req: Request, res: Response, next: NextFunction) {
         try {
-            const userId = req.user!.id;
+            const user = req.user as AuthenticatedUser;
+            if (!user?.id) throw new Error("Authentication error");
+            const userId = user.id;
             const streams = await streamService.getMyStreams(userId);
             res.status(200).json({ status: 'success', results: streams.length, data: { streams } });
         } catch (error) {
@@ -35,7 +42,9 @@ export const streamController = {
 
     async handleGetStreamDetails(req: Request<{ streamId: string }>, res: Response, next: NextFunction) {
         try {
-            const userId = req.user!.id;
+            const user = req.user as AuthenticatedUser;
+            if (!user?.id) throw new Error("Authentication error");
+            const userId = user.id;
             const streamId = req.params.streamId;
             const stream = await streamService.getStreamDetails(streamId, userId);
             res.status(200).json({ status: 'success', data: { stream } });

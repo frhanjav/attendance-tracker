@@ -51,9 +51,9 @@ export const AttendanceRecordOutputSchema = z.object({
     streamId: z.string().cuid(),
     subjectName: z.string(),
     courseCode: z.string().nullable(),
-    classDate: z.date(),
+    classDate: z.string().datetime({ message: "Invalid ISO datetime format" }),
     status: z.nativeEnum(AttendanceStatus),
-    markedAt: z.date(),
+    markedAt: z.string().datetime({ message: "Invalid ISO datetime format" }),
 });
 export type AttendanceRecordOutput = z.infer<typeof AttendanceRecordOutputSchema>;
 

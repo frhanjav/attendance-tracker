@@ -1,6 +1,6 @@
 import { format, parse, startOfWeek, getDay, addDays } from 'date-fns';
 import { dateFnsLocalizer } from 'react-big-calendar';
-import enUS from 'date-fns/locale/en-US'; // Or your preferred locale
+import { enUS } from 'date-fns/locale/en-US'; // <-- Change this line
 
 const locales = {
   'en-US': enUS,

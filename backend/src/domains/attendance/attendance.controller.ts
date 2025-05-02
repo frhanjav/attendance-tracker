@@ -3,6 +3,7 @@ import { attendanceService } from './attendance.service';
 import { MarkAttendanceInput, BulkAttendanceInput, CancelClassInput, CancelClassSchema } from './attendance.dto';
 import { ParsedQs } from 'qs';
 import { z } from 'zod'; // Import Zod if needed for inline validation (though schema is better)
+import { AuthenticatedUser } from '@/middleware/auth.middleware';
 
 // Define schema for weekly view query params if not using validateRequest middleware for it
 const weeklyViewQuerySchema = z.object({
@@ -13,9 +14,11 @@ const weeklyViewQuerySchema = z.object({
 export const attendanceController = {
     async handleMarkAttendance(req: Request<{}, {}, MarkAttendanceInput>, res: Response, next: NextFunction) {
         try {
-            const userId = req.user!.id;
+            const user = req.user as AuthenticatedUser; // Assert type
+            if (!user?.id) throw new Error("Authentication error"); // Runtime check
+            const userId = user.id; // Use the asserted user
             const record = await attendanceService.markDailyAttendance(req.body, userId);
-            res.status(200).json({ status: 'success', data: { record } }); // 200 OK for upsert
+            res.status(200).json({ status: 'success', data: { record } });
         } catch (error) {
             next(error);
         }
@@ -23,7 +26,9 @@ export const attendanceController = {
 
     async handleRecordBulkAttendance(req: Request<{}, {}, BulkAttendanceInput>, res: Response, next: NextFunction) {
         try {
-            const userId = req.user!.id;
+            const user = req.user as AuthenticatedUser;
+            if (!user?.id) throw new Error("Authentication error");
+            const userId = user.id;
             const result = await attendanceService.recordBulkAttendance(req.body, userId);
             res.status(201).json({ status: 'success', data: result });
         } catch (error) {
@@ -33,7 +38,9 @@ export const attendanceController = {
 
      async handleGetAttendanceRecords(req: Request<{}, {}, {}, { streamId?: string, userId?: string, startDate?: string, endDate?: string, subjectName?: string } & ParsedQs>, res: Response, next: NextFunction) : Promise<void> {
         try {
-            const requestingUserId = req.user!.id; // User making the API call
+            const requestingUser = req.user as AuthenticatedUser;
+            if (!requestingUser?.id) throw new Error("Authentication error");
+            const requestingUserId = requestingUser.id;
             const { streamId, userId: targetUserId, startDate, endDate, subjectName } = req.query;
 
             if (!streamId || typeof streamId !== 'string'){
@@ -63,7 +70,9 @@ export const attendanceController = {
     // --- NEW: Cancel Class Globally (Admin) ---
     async handleCancelClassGlobally(req: Request<{}, {}, CancelClassInput>, res: Response, next: NextFunction) {
         try {
-            const adminUserId = req.user!.id; // Assuming admin is logged in
+            const adminUser = req.user as AuthenticatedUser;
+            if (!adminUser?.id) throw new Error("Authentication error");
+            const adminUserId = adminUser.id;
             // Input validation is handled by validateRequest(CancelClassSchema) middleware
             const result = await attendanceService.cancelClassGlobally(req.body, adminUserId);
             res.status(200).json({ status: 'success', data: result });
@@ -80,7 +89,9 @@ export const attendanceController = {
         next: NextFunction
     ) {
         try {
-            const userId = req.user!.id; // Logged-in user requesting their view
+            const user = req.user as AuthenticatedUser;
+            if (!user?.id) throw new Error("Authentication error");
+            const userId = user.id; // Logged-in user requesting their view
             const streamId = req.params.streamId;
             // Validation of query params is handled by validateRequest middleware
             const { startDate, endDate } = req.query as { startDate: string, endDate: string }; // Cast after validation

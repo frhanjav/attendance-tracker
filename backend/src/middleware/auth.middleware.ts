@@ -5,18 +5,16 @@ import { UnauthorizedError } from '../core/errors';
 import prisma from '../infrastructure/prisma';
 import { User } from '@prisma/client'; // Import the full User type
 
+// Define a minimal type for what 'protect' middleware guarantees on req.user
+export interface AuthenticatedUser {
+    id: string;
+    // Add other fields if your protect middleware attaches them and you need them
+    // emailVerified?: boolean;
+}
+
 interface JwtPayload {
     id: string;
 }
-
-// // Extend Express Request type
-// declare global {
-//     namespace Express {
-//         interface Request {
-//             user?: { id: string }; // Add user property
-//         }
-//     }
-// }
 
 export const protect = async (req: Request, res: Response, next: NextFunction) => {
     let token;

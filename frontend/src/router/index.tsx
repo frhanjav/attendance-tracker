@@ -9,13 +9,10 @@ import LandingPage from '../pages/LandingPage'; // Import LandingPage
 import DashboardPage from '../pages/DashboardPage';
 import StreamPage from '../pages/StreamPage';
 import TimetablePage from '../pages/TimetablePage';
-import TimetableDetailPage from '../pages/TimetableDetailPage'; // Import the new page component
 import AttendancePage from '../pages/AttendancePage';
 import AnalyticsPage from '../pages/AnalyticsPage'; // Add AnalyticsPage
 import NotFoundPage from '../pages/NotFoundPage';
 import AppLayout from '../layouts/AppLayout';
-// Landing page might not need a full layout, or use a specific one
-// import LandingLayout from '../layouts/LandingLayout';
 import { useAuth } from '../hooks/useAuth';
 import React from 'react';
 import ErrorBoundary from '../components/ErrorBoundary'; // Import the boundary
@@ -70,10 +67,6 @@ const router = createBrowserRouter([
                     { path: 'dashboard', element: <DashboardPage /> },
                     { path: 'streams/:streamId', element: <StreamPage /> },
                     { path: 'streams/:streamId/timetable', element: <TimetablePage /> },
-                    {
-                        path: 'streams/:streamId/timetables/:timetableId',
-                        element: <TimetableDetailPage />,
-                    },
                     { path: 'streams/:streamId/attendance', element: <AttendancePage /> },
                     { path: 'streams/:streamId/analytics', element: <AnalyticsPage /> }, // Add analytics route
                     // Add other authenticated routes here
