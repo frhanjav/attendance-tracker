@@ -6,7 +6,8 @@ secrets.yaml
 !.vscode/extensions.json
 !.vscode/launch.json
 
-.idea
+.idea/
+*.iml
 
 .DS_Store
 Thumbs.db
@@ -21,6 +22,7 @@ Thumbs.db
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
 
 node_modules/
 dist

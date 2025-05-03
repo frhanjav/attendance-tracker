@@ -1,90 +1,96 @@
-version: '3.8'
+version: '3.8' # You can remove this line if you got the warning
 
 services:
-  postgres_db_dev: # Renamed service for clarity
+  postgres_db_dev:
+    # ... (no changes needed here) ...
     image: postgres:15-alpine
     container_name: attendance_postgres_dev
     environment:
-      # These MUST match the DATABASE_URL in backend/.env.development
       POSTGRES_USER: devuser
       POSTGRES_PASSWORD: devpassword
       POSTGRES_DB: attendance_dev
     ports:
-      - "5432:5432" # Expose standard PG port on host
+      - "5432:5432"
     volumes:
       - postgres_dev_data:/var/lib/postgresql/data
     networks:
       - attendance_dev_net
     restart: unless-stopped
+    healthcheck:
+        test: ["CMD-SHELL", "pg_isready -U devuser -d attendance_dev"]
+        interval: 10s
+        timeout: 5s
+        retries: 5
 
   backend:
     container_name: attendance_backend_dev
-    # Build from backend directory using its Dockerfile
     build:
       context: ./backend
       dockerfile: Dockerfile
-    # Command to run dev server with hot-reloading
-    command: npm run dev
+    command: npx ts-node-dev --respawn --transpile-only src/server.ts # Use npx
     volumes:
-      # Mount source code (except node_modules)
+      # Mount source code directly for hot-reloading
       - ./backend/src:/app/src
       - ./backend/prisma:/app/prisma
-      # Mount other necessary files like tsconfig, package.json if needed by dev process
+      # Mount config/package files needed by dev process
       - ./backend/package.json:/app/package.json
       - ./backend/package-lock.json:/app/package-lock.json
       - ./backend/tsconfig.json:/app/tsconfig.json
-      # Use a named volume for node_modules to prevent overwriting
-      - backend_node_modules:/app/node_modules
+      # --- IMPORTANT: Anonymous Volume for node_modules ---
+      # Use an anonymous volume ONLY for the node_modules directory inside the container.
+      # This tells Docker: "Persist node_modules within a container-managed volume,
+      # but DO NOT overwrite it with anything from the host".
+      # It uses the node_modules installed during the 'docker build' step.
+      - /app/node_modules
+      # --- End Change ---
     ports:
-      - "3001:3001" # Expose backend API port
+      - "3001:3001"
     depends_on:
-      - postgres_db_dev
-    # Load environment variables from the specified file
+      postgres_db_dev:
+        condition: service_healthy
     env_file:
       - ./backend/.env.development
     networks:
       - attendance_dev_net
     restart: unless-stopped
+    stdin_open: true
+    tty: true
 
   frontend:
     container_name: attendance_frontend_dev
     build:
       context: ./frontend
-      dockerfile: Dockerfile # Uses the simplified Dockerfile
-      # Pass VITE_API_BASE_URL during build if needed by production build
-      # args:
-      #   VITE_API_BASE_URL: http://localhost:3001/api/v1 # Or /api/v1 if proxying
-    # Command to run Vite dev server
-    # --host exposes it outside the container
-    command: npm run dev -- --host
+      dockerfile: Dockerfile
+    command: npm run dev -- --host 0.0.0.0 --port 5173
     volumes:
-      # Mount source code (except node_modules)
+      # Mount source code directly
       - ./frontend/src:/app/src
       - ./frontend/public:/app/public
       - ./frontend/index.html:/app/index.html
       - ./frontend/vite.config.ts:/app/vite.config.ts
       - ./frontend/tailwind.config.js:/app/tailwind.config.js
-      # Mount other necessary files
       - ./frontend/package.json:/app/package.json
       - ./frontend/package-lock.json:/app/package-lock.json
       - ./frontend/tsconfig.json:/app/tsconfig.json
-      # Use a named volume for node_modules
-      - frontend_node_modules:/app/node_modules
+      # --- Apply same anonymous volume trick for frontend ---
+      - /app/node_modules
+      # --- End Change ---
     ports:
-      - "5173:5173" # Expose Vite dev server port
-    # Vite dev server reads .env.development automatically from context
-    # env_file:
-    #   - ./frontend/.env.development # Usually not needed for Vite dev server
+      - "5173:5173"
     depends_on:
       - backend
     networks:
       - attendance_dev_net
     restart: unless-stopped
+    stdin_open: true
+    tty: true
 
 volumes:
-  postgres_dev_data:
-  backend_node_modules: # Persist backend node_modules
-  frontend_node_modules: # Persist frontend node_modules
+  postgres_dev_data: # Keep named volume for DB data
+    driver: local
+  # --- REMOVE Named volumes for node_modules ---
+  # backend_node_modules:
+  # frontend_node_modules:
 
 networks:
   attendance_dev_net:

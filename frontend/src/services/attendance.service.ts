@@ -1,6 +1,12 @@
 // frontend/src/services/attendance.service.ts (Create or update)
 import apiClient from '../lib/apiClient';
-import { AttendanceStatus } from '@prisma/client'; // Import if needed, or define enum locally
+
+export enum AttendanceStatus {
+    OCCURRED = 'OCCURRED',
+    MISSED   = 'MISSED',
+    CANCELLED = 'CANCELLED',
+  }
+  
 
 // Define types matching backend DTOs
 
@@ -172,6 +178,3 @@ export const attendanceService = {
     // Optional: Function to get subjects for a stream (if needed for bulk form)
     // getStreamSubjects: async (streamId: string): Promise<string[]> => { ... }
 };
-
-// Re-export or define AttendanceStatus enum if not importing from backend types
-export { AttendanceStatus }; // Assuming it's available globally or imported
