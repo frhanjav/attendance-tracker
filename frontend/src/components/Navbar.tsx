@@ -39,8 +39,25 @@ const Navbar: React.FC = () => {
 
     // Function to initiate Google Login
     const handleGoogleLogin = () => {
-      const googleAuthUrl = `${config.apiBaseUrl}/auth/google`;
-      window.location.href = googleAuthUrl; // Redirect browser to backend auth route
+      // Construct the absolute URL pointing to the backend via the proxy/host
+      // We know the proxy runs on localhost:8080 in this test setup
+      const backendApiPrefix = '/api/v1'; // Matches VITE_API_BASE_URL used for client-side fetch
+      const proxyOrigin = window.location.origin; // Gets http://localhost:8080
+      // We need the backend origin for the redirect, which might be different
+      // For the local prod test, the backend is accessible via host port 3001
+      // For actual deployment, it would be your domain.
+      // Let's assume for this test, we redirect directly to backend's exposed port
+      // OR rely on the proxy handling it (which failed before).
+      // BEST APPROACH: Redirect to the path on the CURRENT origin (the proxy)
+      const googleAuthUrl = `${proxyOrigin}${backendApiPrefix}/auth/google`; // e.g., http://localhost:8080/api/v1/auth/google
+  
+      // --- Alternative (if direct backend access needed, less ideal with proxy) ---
+      // const backendOrigin = 'http://localhost:3001'; // Backend's direct access port
+      // const googleAuthUrl = `${backendOrigin}${backendApiPrefix}/auth/google`;
+      // ---
+  
+      console.log("Redirecting to Google Auth:", googleAuthUrl);
+      window.location.href = googleAuthUrl; // Redirect browser
   };
   
   return (

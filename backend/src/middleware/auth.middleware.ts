@@ -19,6 +19,8 @@ interface JwtPayload {
 export const protect = async (req: Request, res: Response, next: NextFunction) => {
     let token;
 
+    console.log('[Protect Middleware] Starting token verification...');
+
     // --- Strategy 1: Check for JWT in HttpOnly Cookie ---
     if (req.cookies?.authToken) {
         token = req.cookies.authToken;
@@ -62,6 +64,8 @@ export const protect = async (req: Request, res: Response, next: NextFunction) =
 
         // Attach user ID to request object
         req.user = currentUser;
+
+        console.log('[Protect Middleware] Token verified. Granting access to user:', currentUser.id);
         next(); // Grant access
     } catch (err) {
         console.error('[Protect Middleware] Token verification failed:', err); // Log error

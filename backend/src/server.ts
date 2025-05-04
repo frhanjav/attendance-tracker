@@ -97,20 +97,23 @@ app.use(passport.initialize());
 
 // --- Routes ---
 console.log("Registering API routes under /api/v1");
-app.use('/api/v1', apiRouter); // Mount API routes AFTER middleware
+app.use('/api/v1', apiRouter);
+console.log('API Router Mounted at /api/v1');
 
-// --- Handle Not Found API Routes ---
-// This catches requests to /api/v1/... that don't match any defined API route
+// --- Not Found Handlers ---
+// *** API 404 Handler - Catches requests starting with /api/v1 that DON'T match routes in apiRouter ***
 app.all('/api/v1/*', (req: Request, res: Response, next: NextFunction) => {
+  console.log(`API Route Not Found: ${req.method} ${req.originalUrl}`); // Add log
   next(new NotFoundError(`API route not found: ${req.originalUrl}`));
 });
 
-// --- Handle Not Found for Non-API Routes (Optional - if backend serves frontend) ---
-// If your backend *doesn't* serve the frontend static files (frontend runs separately),
-// you might not need this specific catch-all here. The frontend router handles its 404s.
+// *** Optional: Catch-all for non-API routes (if backend serves anything else) ***
 // app.all('*', (req: Request, res: Response, next: NextFunction) => {
+//   console.log(`Non-API Route Not Found: ${req.method} ${req.originalUrl}`);
 //   next(new NotFoundError(`Resource not found: ${req.originalUrl}`));
 // });
+// --- End Not Found Handlers ---
+
 
 // --- Global Error Handling Middleware ---
 // Must be the LAST middleware added

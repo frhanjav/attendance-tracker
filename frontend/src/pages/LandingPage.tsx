@@ -28,6 +28,8 @@ const GoogleIcon = () => (
 const LandingPage: React.FC = () => {
     const handleGoogleLogin = () => {
         const googleAuthUrl = `${config.apiBaseUrl}/auth/google`;
+
+        console.log("Redirecting to Google Auth:", googleAuthUrl);
         window.location.href = googleAuthUrl;
     };
 

@@ -33,7 +33,7 @@ export const config = {
     port: process.env.PORT || 3001,
     databaseUrl: process.env.DATABASE_URL || '',
     nodeEnv: process.env.NODE_ENV || 'development',
-    frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
+    frontendUrl: process.env.FRONTEND_URL || 'http://localhost:8080',
 
     // JWT
     jwtSecret: process.env.JWT_SECRET || 'fallback_jwt_secret_!!change_me!!',
