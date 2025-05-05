@@ -12,13 +12,15 @@ const AppLayout: React.FC = () => {
     return (
         <div className="min-h-screen flex flex-col bg-gray-100"> {/* Added bg color */}
             <Navbar />
-
             <div className="flex flex-1 overflow-hidden"> {/* Allow content to scroll */}
+
                 {/* Sidebar */}
+                <div className="hidden md:flex md:flex-shrink-0">
                 <Sidebar
                     openCreateStreamModal={() => setCreateModalOpen(true)}
                     openJoinStreamModal={() => setJoinModalOpen(true)}
                 />
+                </div>
 
                 {/* Main Content Area */}
                 <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">

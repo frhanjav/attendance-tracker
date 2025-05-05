@@ -78,6 +78,7 @@ services:
         volumes:
             # Mount the reverse proxy config from project root
             - ./nginx.reverse-proxy.conf:/etc/nginx/conf.d/default.conf:ro
+            - /etc/letsencrypt:/etc/letsencrypt:ro
         depends_on:
             - frontend
             - backend
