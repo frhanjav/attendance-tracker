@@ -13,85 +13,120 @@ datasource db {
 // --- Enums ---
 enum AttendanceStatus {
   OCCURRED // Class happened, student attended
-  MISSED   // Class happened, student did NOT attend (or default if no record)
+  MISSED // Class happened, student did NOT attend (or default if no record)
   CANCELLED // Class did not happen (globally cancelled by admin)
 }
 
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  password  String
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  emailVerified Boolean @default(false)
+enum OverrideType {
+  CANCELLED
+  REPLACED
+}
 
-  streamsOwned    Stream[]           @relation("StreamOwner")
-  streamMemberships StreamMembership[]
-  attendanceRecords AttendanceRecord[]
-  bulkEntries     BulkAttendanceEntry[]
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  password      String
+  name          String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  emailVerified Boolean  @default(false)
+
+  streamsOwned       Stream[]              @relation("StreamOwner")
+  streamMemberships  StreamMembership[]
+  attendanceRecords  AttendanceRecord[]
+  bulkEntries        BulkAttendanceEntry[]
+  classOverridesMade ClassOverride[]
 }
 
 model Stream {
-  id          String   @id @default(cuid())
-  name        String
-  streamCode  String   @unique @default(cuid()) // Simple unique code for joining
-  ownerId     String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(cuid())
+  name       String
+  streamCode String   @unique @default(cuid()) // Simple unique code for joining
+  ownerId    String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  owner       User               @relation("StreamOwner", fields: [ownerId], references: [id])
-  members     StreamMembership[]
-  timetables  Timetable[]
+  owner             User                  @relation("StreamOwner", fields: [ownerId], references: [id])
+  members           StreamMembership[]
+  timetables        Timetable[]
   // Link global statuses here if needed, or handle via AttendanceRecord
   // cancelledClasses CancelledClass[] // Example if storing cancellations separately
   attendanceRecords AttendanceRecord[]
-  bulkEntries     BulkAttendanceEntry[]
+  bulkEntries       BulkAttendanceEntry[]
+  classOverrides    ClassOverride[]
 
   @@index([ownerId])
 }
 
 // Join table for users and streams
 model StreamMembership {
-  id        String   @id @default(cuid())
-  userId    String
-  streamId  String
-  role      String   @default("member") // e.g., "admin", "member"
-  joinedAt  DateTime @default(now())
+  id       String   @id @default(cuid())
+  userId   String
+  streamId String
+  role     String   @default("member") // e.g., "admin", "member"
+  joinedAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  stream    Stream   @relation(fields: [streamId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stream Stream @relation(fields: [streamId], references: [id], onDelete: Cascade)
 
   @@unique([userId, streamId])
   @@index([userId])
   @@index([streamId])
 }
 
-model Timetable {
-  id          String   @id @default(cuid())
-  streamId    String
-  name        String   // e.g., "Semester 1 Timetable"
-  validFrom   DateTime // Start date this timetable is active
-  validUntil  DateTime? // Optional end date
+// New table to store global overrides for specific class instances
+model ClassOverride {
+  id                  String   @id @default(cuid())
+  streamId            String
+  classDate           DateTime // Date of the original class
+  originalSubjectName String
+  originalStartTime   String? // Optional: To identify specific slot if multiple per day
+  // originalEndTime String?     // Optional
+
+  overrideType OverrideType // CANCELLED or REPLACED
+
+  // Fields for REPLACED type
+  replacementSubjectName String?
+  replacementCourseCode  String?
+  replacementStartTime   String?
+  replacementEndTime     String?
+
+  adminUserId String // Who made the override
   createdAt   DateTime @default(now())
 
-  stream      Stream           @relation(fields: [streamId], references: [id], onDelete: Cascade)
-  entries     TimetableEntry[]
+  stream    Stream @relation(fields: [streamId], references: [id], onDelete: Cascade)
+  adminUser User   @relation(fields: [adminUserId], references: [id])
+
+  // Ensure only one override exists for a specific class instance
+  @@unique([streamId, classDate, originalSubjectName])
+  @@index([streamId, classDate])
+}
+
+model Timetable {
+  id         String    @id @default(cuid())
+  streamId   String
+  name       String // e.g., "Semester 1 Timetable"
+  validFrom  DateTime // Start date this timetable is active
+  validUntil DateTime? // Optional end date
+  createdAt  DateTime  @default(now())
+
+  stream  Stream           @relation(fields: [streamId], references: [id], onDelete: Cascade)
+  entries TimetableEntry[]
 
   @@index([streamId])
   @@index([validFrom])
 }
 
 model TimetableEntry {
-  id          String   @id @default(cuid())
+  id          String  @id @default(cuid())
   timetableId String
-  dayOfWeek   Int      // ISO 8601 day of week (1 = Monday, 7 = Sunday)
+  dayOfWeek   Int // ISO 8601 day of week (1 = Monday, 7 = Sunday)
   subjectName String
   courseCode  String?
-  startTime   String?  // Optional: e.g., "09:00"
-  endTime     String?  // Optional: e.g., "10:00"
+  startTime   String? // Optional: e.g., "09:00"
+  endTime     String? // Optional: e.g., "10:00"
 
-  timetable   Timetable @relation(fields: [timetableId], references: [id], onDelete: Cascade)
+  timetable Timetable @relation(fields: [timetableId], references: [id], onDelete: Cascade)
 
   @@index([timetableId])
   @@index([dayOfWeek])
@@ -102,59 +137,53 @@ model TimetableEntry {
 // For simplicity here, we link AttendanceRecord directly to Stream/Subject/Date
 
 model AttendanceRecord {
-  id          String   @id @default(cuid())
+  id          String           @id @default(cuid())
   userId      String
   streamId    String
   subjectName String
-  // Store courseCode at time of record creation for historical accuracy
   courseCode  String?
   classDate   DateTime // The specific date the class was scheduled/held
   status      AttendanceStatus @default(MISSED)
-  markedAt    DateTime @updatedAt // When the status was last changed
+  markedAt    DateTime         @updatedAt // When the status was last changed
 
-    // --- Fields for Replacement Tracking ---
-  isReplacement   Boolean @default(false) // Is this record for a class that replaced another?
-  originalSubjectName String? // If isReplacement=true, what subject was originally scheduled?
-  originalCourseCode String?
-  originalStartTime String? // Optional: If time also changed or needed for uniqueness
-  originalEndTime String?   // Optional
-  // --- End Replacement Fields ---
-  
   // Optional: Track who marked it if needed (e.g., distinguishing admin actions)
   // markedByUserId String?
 
   // Optional: Add notes if needed later
   // notes String?
 
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  stream      Stream   @relation(fields: [streamId], references: [id], onDelete: Cascade)
+  isReplacement       Boolean @default(false)
+  originalSubjectName String?
+  originalCourseCode  String?
+  originalStartTime   String?
+  originalEndTime     String?
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stream Stream @relation(fields: [streamId], references: [id], onDelete: Cascade)
   // markedBy User? // If tracking who marked is needed
 
   // Unique constraint: One status per user per class instance
-  @@unique([userId, streamId, subjectName, classDate]) // Ensure one record per user/stream/subject/date
-  @@index([userId])
-  @@index([streamId])
-  @@index([classDate])
-  @@index([status]) // Index status for faster querying
+  @@unique([userId, streamId, subjectName, classDate, isReplacement])
+  @@index([userId, streamId, classDate, status])
   @@index([isReplacement])
 }
 
 // For bulk entry feature
 model BulkAttendanceEntry {
-  id              String   @id @default(cuid())
-  userId          String
-  streamId        String
-  subjectName     String
-  courseCode      String?
-  attendedClasses Int      // Number of classes attended by the user for this subject
+  id               String   @id @default(cuid())
+  userId           String
+  streamId         String
+  subjectName      String
+  courseCode       String?
+  attendedClasses  Int // Number of classes attended by the user for this subject
   // Store total held classes *at the time of calculation* based on new definition
   totalHeldClasses Int?
-  calculationDate DateTime @default(now()) // When this bulk entry was made/calculated
-  startDate       DateTime // Start date used for calculation
-  endDate         DateTime // End date used for calculation (usually current date)
+  calculationDate  DateTime @default(now()) // When this bulk entry was made/calculated
+  startDate        DateTime // Start date used for calculation
+  endDate          DateTime // End date used for calculation (usually current date)
 
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  stream          Stream   @relation(fields: [streamId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stream Stream @relation(fields: [streamId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([streamId])

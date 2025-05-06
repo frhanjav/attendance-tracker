@@ -55,7 +55,12 @@ const AnalyticsPage: React.FC = () => {
 
     // --- Fetch Analytics Data ---
     // Ensure StreamAnalyticsData type includes totalHeldClasses
-    const { data: analyticsData, isLoading, error, status } = useQuery<StreamAnalyticsData, Error>({
+    const {
+        data: analyticsData,
+        isLoading,
+        error,
+        status,
+    } = useQuery<StreamAnalyticsData, Error>({
         queryKey: ['streamAnalytics', streamId],
         queryFn: () => analyticsService.getStreamAnalytics(streamId!),
         enabled: !!streamId,
@@ -63,13 +68,15 @@ const AnalyticsPage: React.FC = () => {
         refetchOnWindowFocus: false,
     });
 
-    console.log(`[AnalyticsPage] Query Status: ${status}, IsLoading: ${isLoading}, Error: ${error?.message}`);
+    console.log(
+        `[AnalyticsPage] Query Status: ${status}, IsLoading: ${isLoading}, Error: ${error?.message}`,
+    );
 
     // --- Effect to initialize manual inputs ---
     useEffect(() => {
         if (analyticsData?.subjectStats) {
             const initialManualValues: ManualAttendanceInput = {};
-            analyticsData.subjectStats.forEach(stat => {
+            analyticsData.subjectStats.forEach((stat) => {
                 initialManualValues[stat.subjectName] = String(stat.attended ?? '');
             });
             setManualAttendance(initialManualValues);
@@ -85,23 +92,34 @@ const AnalyticsPage: React.FC = () => {
         let overallAttendedManual = 0;
         let overallHeldManual = analyticsData.totalHeldClasses; // Held count doesn't change with manual input
 
-        const manualSubjectStats: SubjectStats[] = analyticsData.subjectStats.map(stat => {
+        const manualSubjectStats: SubjectStats[] = analyticsData.subjectStats.map((stat) => {
             const manualAttendedStr = manualAttendance[stat.subjectName] ?? String(stat.attended);
             const manualAttendedNum = parseInt(manualAttendedStr, 10);
-            const attended = (!isNaN(manualAttendedNum) && manualAttendedNum >= 0) ? manualAttendedNum : stat.attended;
+            const attended =
+                !isNaN(manualAttendedNum) && manualAttendedNum >= 0
+                    ? manualAttendedNum
+                    : stat.attended;
             const cappedAttended = Math.min(attended, stat.totalHeldClasses); // Cap at held
             const held = stat.totalHeldClasses;
 
-            const percentage = held > 0 ? parseFloat(((cappedAttended / held) * 100).toFixed(2)) : null;
+            const percentage =
+                held > 0 ? parseFloat(((cappedAttended / held) * 100).toFixed(2)) : null;
             overallAttendedManual += cappedAttended;
 
             return { ...stat, attended: cappedAttended, attendancePercentage: percentage };
         });
 
-        const overallPercentageManual = overallHeldManual > 0 ? parseFloat(((overallAttendedManual / overallHeldManual) * 100).toFixed(2)) : null;
+        const overallPercentageManual =
+            overallHeldManual > 0
+                ? parseFloat(((overallAttendedManual / overallHeldManual) * 100).toFixed(2))
+                : null;
 
-        return { ...analyticsData, totalAttendedClasses: overallAttendedManual, overallAttendancePercentage: overallPercentageManual, subjectStats: manualSubjectStats };
-
+        return {
+            ...analyticsData,
+            totalAttendedClasses: overallAttendedManual,
+            overallAttendancePercentage: overallPercentageManual,
+            subjectStats: manualSubjectStats,
+        };
     }, [analyticsData, isManualMode, manualAttendance]);
 
     // --- Calculator Form Setup ---
@@ -139,58 +157,6 @@ const AnalyticsPage: React.FC = () => {
         },
     });
 
-    // --- Calculator Submit Handler ---
-    const onCalculateSubmit = (formData: CalculatorFormInputs) => {
-        if (!streamId || !displayStats) {
-            // Need displayStats to get current values in manual mode
-            toast.error('Cannot calculate projection: data not available.');
-            return;
-        }
-        setProjectionResult(null);
-
-        let currentAttendedInput: number | undefined = undefined;
-        let currentHeldInput: number | undefined = undefined;
-
-        // If in manual mode, get the current values from the recalculated displayStats
-        if (isManualMode) {
-            if (formData.subjectName && formData.subjectName !== '__OVERALL__') {
-                const manualSubjectStat = displayStats.subjectStats.find(
-                    (s) => s.subjectName === formData.subjectName,
-                );
-                currentAttendedInput = manualSubjectStat?.attended;
-                currentHeldInput = manualSubjectStat?.totalHeldClasses;
-            } else {
-                currentAttendedInput = displayStats.totalAttendedClasses;
-                currentHeldInput = displayStats.totalHeldClasses;
-            }
-            // Basic validation for manually derived counts
-            if (currentAttendedInput === undefined || currentHeldInput === undefined) {
-                toast.error('Cannot calculate projection: manual attendance data is incomplete.');
-                return;
-            }
-            if (currentAttendedInput > currentHeldInput) {
-                toast.error(
-                    `Manual attended count (${currentAttendedInput}) cannot exceed held count (${currentHeldInput}) for calculation.`,
-                );
-                return;
-            }
-        }
-
-        // Construct payload for the mutation
-        const mutationInput: AttendanceCalculatorInput = {
-            streamId: streamId,
-            targetPercentage: formData.targetPercentage,
-            targetDate: formData.targetDate,
-            subjectName: formData.subjectName === '__OVERALL__' ? undefined : formData.subjectName,
-            // Conditionally include manual counts
-            currentAttendedInput: isManualMode ? currentAttendedInput : undefined,
-            currentHeldInput: isManualMode ? currentHeldInput : undefined,
-        };
-
-        console.log('Calculator Payload:', mutationInput); // Log payload
-        calculateMutation.mutate(mutationInput);
-    };
-
     // --- Manual Input Handler ---
     const handleManualInputChange = (subjectName: string, value: string, maxAllowed: number) => {
         // Allow empty string or non-negative integers
@@ -211,6 +177,95 @@ const AnalyticsPage: React.FC = () => {
         }
         // Ignore invalid characters (non-digits)
     };
+
+    // --- REVISED Calculator Submit Handler ---
+    const onCalculateSubmit = (formData: CalculatorFormInputs) => {
+        if (!streamId) {
+            toast.error('Stream ID missing.');
+            return;
+        }
+        if (!analyticsData && !isManualMode) { // Need analyticsData if not in manual mode for backend to fetch
+            toast.error('Analytics data not loaded yet for historical calculation.');
+            return;
+        }
+        if (isManualMode && !analyticsData?.subjectStats) { // Need subjectStats for held counts even in manual
+             toast.error('Subject statistics not available for manual calculation.');
+             return;
+        }
+
+
+        setProjectionResult(null); // Clear previous result
+
+        let effectiveCurrentAttended: number | undefined = undefined;
+        let effectiveCurrentHeld: number | undefined = undefined;
+        const subjectFilter = formData.subjectName === "__OVERALL__" ? undefined : formData.subjectName;
+
+        if (isManualMode) {
+            console.log("[onSubmit] Manual Mode. Current manualAttendance state:", JSON.parse(JSON.stringify(manualAttendance)));
+            let attendedSum = 0;
+            let heldSum = 0;
+            let subjectProcessed = !subjectFilter; // True if no filter, or becomes true if filter matches
+
+            if (analyticsData?.subjectStats) { // Ensure subjectStats exists
+                analyticsData.subjectStats.forEach((stat) => {
+                    const isTargetSubject = !subjectFilter || stat.subjectName === subjectFilter;
+                    if (isTargetSubject) {
+                        subjectProcessed = true;
+                        // Get value from manualAttendance state, fallback to fetched stat.attended if manual entry is invalid/missing
+                        const manualAttendedStr = manualAttendance[stat.subjectName];
+                        let subjectAttended = stat.attended; // Default to fetched
+
+                        if (manualAttendedStr !== undefined && manualAttendedStr !== '') {
+                            const manualAttendedNum = parseInt(manualAttendedStr, 10);
+                            if (!isNaN(manualAttendedNum) && manualAttendedNum >= 0) {
+                                subjectAttended = Math.min(manualAttendedNum, stat.totalHeldClasses); // Use manual, capped
+                            } else {
+                                // Invalid manual input, stick to fetched or 0 if fetched is null
+                                subjectAttended = stat.attended ?? 0;
+                                console.warn(`Invalid manual input for ${stat.subjectName}, using fetched/default: ${subjectAttended}`);
+                            }
+                        } else if (manualAttendedStr === '') { // Explicitly empty means 0 for manual
+                            subjectAttended = 0;
+                        }
+                        // If manualAttendedStr is undefined, it means no manual input for this subject, so stat.attended is used.
+
+                        attendedSum += subjectAttended;
+                        heldSum += stat.totalHeldClasses; // Held count always comes from fetched data
+                    }
+                });
+            }
+
+
+            if (!subjectProcessed && subjectFilter) {
+                 toast.error(`Subject "${subjectFilter}" not found in stats for manual calculation.`);
+                 return;
+            }
+
+            effectiveCurrentAttended = attendedSum;
+            effectiveCurrentHeld = heldSum;
+
+            if (effectiveCurrentAttended > effectiveCurrentHeld) {
+                toast.error(`Manual attended count (${effectiveCurrentAttended}) cannot exceed total held (${effectiveCurrentHeld}).`);
+                return;
+            }
+            console.log("[onSubmit] Manual Mode - Calculated for payload:", { effectiveCurrentAttended, effectiveCurrentHeld });
+        }
+        // If not in manual mode, effectiveCurrentAttended and effectiveCurrentHeld remain undefined,
+        // and the backend will fetch the historical data.
+
+        const mutationInput: AttendanceCalculatorInput = {
+            streamId: streamId,
+            targetPercentage: formData.targetPercentage,
+            targetDate: formData.targetDate,
+            subjectName: subjectFilter,
+            currentAttendedInput: effectiveCurrentAttended, // Will be undefined if not manual mode
+            currentHeldInput: effectiveCurrentHeld,       // Will be undefined if not manual mode
+        };
+
+        console.log("Calculator Payload to be sent:", mutationInput);
+        calculateMutation.mutate(mutationInput);
+    };
+    // --- End Revised Submit Handler ---
 
     // --- Render Loading/Error States ---
     if (isLoading)
@@ -506,6 +561,7 @@ const AnalyticsPage: React.FC = () => {
                     </form>
 
                     {/* Calculator Result Display */}
+                    {/* Calculator Result Display (uses projectionResult state) */}
                     {calculateMutation.isSuccess && projectionResult && (
                         <div className="mt-6 p-4 bg-blue-50 rounded border border-blue-200 text-blue-800 space-y-2">
                             <h4 className="font-semibold text-lg flex items-center">
@@ -514,11 +570,10 @@ const AnalyticsPage: React.FC = () => {
                             </h4>
                             <p className="text-sm">{projectionResult.message}</p>
                             <div className="text-xs grid grid-cols-2 gap-x-4 gap-y-1 pt-2">
+                                {/* These values come DIRECTLY from the backend calculation result */}
                                 <span>Current Attended: {projectionResult.currentAttended}</span>
-                                <span>Future Held: {projectionResult.futureHeld}</span>{' '}
-                                {/* Use futureHeld */}
-                                <span>Current Held: {projectionResult.currentHeld}</span>{' '}
-                                {/* Use currentHeld */}
+                                <span>Future Held: {projectionResult.futureHeld}</span>
+                                <span>Current Held: {projectionResult.currentHeld}</span>
                                 <span>Classes Needed: {projectionResult.neededToAttend}</span>
                                 <span>
                                     Current %:{' '}

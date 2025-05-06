@@ -1,4 +1,3 @@
-// frontend/src/services/stream.service.ts
 import apiClient from '../lib/apiClient';
 
 // Define types for Stream data (match backend DTOs)
