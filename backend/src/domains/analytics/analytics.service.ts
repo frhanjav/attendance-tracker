@@ -87,55 +87,75 @@ export const analyticsService = {
         const cancelledCounts = await attendanceRepository.countCancelledClasses(streamId, startDate, endDate);
         console.log(`[Analytics Service BE] Cancelled counts:`, cancelledCounts);
 
-        // --- Calculate stats per subject ---
-        console.log(`[Analytics Service BE] Calculating subject stats...`);
-        const subjectStats: SubjectStatsOutput[] = [];
-        let overallAttended = 0;
-        let overallHeld = 0; // Total scheduled minus cancelled
-
-        for (const subjectInfo of allSubjects) {
-            const subjectName = subjectInfo.subjectName;
-            const totalScheduled = scheduledCounts[subjectName] || 0;
-            const totalCancelled = cancelledCounts[subjectName] || 0;
-            const totalHeld = Math.max(0, totalScheduled - totalCancelled);
-
-            const subjectRecords = records.filter(r => r.subjectName === subjectName);
-            const attended = subjectRecords.filter(r => r.status === AttendanceStatus.OCCURRED).length;
-            const totalMarked = subjectRecords.filter(r => r.status === AttendanceStatus.OCCURRED || r.status === AttendanceStatus.CANCELLED).length; // Example definition
-
-            const attendancePercentage = totalHeld > 0
-                ? parseFloat(((attended / totalHeld) * 100).toFixed(2))
-                : null;
-
-            subjectStats.push({
-                subjectName,
-                courseCode: subjectInfo.courseCode ?? null,
-                totalScheduled,
-                totalMarked,
-                totalHeldClasses: totalHeld, // Use the DTO field name (assuming it's totalHeldClasses)
-                attended,
-                attendancePercentage,
-            });
-
-            overallAttended += attended;
-            overallHeld += totalHeld;
+        // --- NEW: Fetch Replacement Class Instances ---
+        console.log(`[Analytics Service BE] Fetching replacement counts...`);
+        const replacementInstances = await attendanceRepository.findReplacementClasses(streamId, startDate, endDate);
+        const replacementCounts: Record<string, number> = {}; // { [subjectName]: count }
+        for (const rep of replacementInstances) {
+            replacementCounts[rep.subjectName] = (replacementCounts[rep.subjectName] || 0) + 1;
         }
+        console.log(`[Analytics Service BE] Replacement counts:`, replacementCounts);
+        // --- End Fetch Replacement ---
+
+         // --- Calculate stats per subject ---
+         console.log(`[Analytics Service BE] Calculating subject stats...`);
+         const subjectStats: SubjectStatsOutput[] = [];
+         let overallAttended = 0;
+         let overallHeld = 0;
+ 
+         // Ensure all subjects (scheduled original OR used as replacement) are included
+         const allSubjectNames = new Set([
+              ...subjectDetailsMap.keys(), // Subjects originally scheduled
+              ...Object.keys(replacementCounts) // Subjects used as replacements
+         ]);
+ 
+         for (const subjectName of allSubjectNames) {
+             // Get details if available (might not be if only used as replacement)
+             const subjectInfo = subjectDetailsMap.get(subjectName);
+             const totalScheduled = scheduledCounts[subjectName] || 0;
+             const totalCancelled = cancelledCounts[subjectName] || 0;
+             const totalTimesWasReplacement = replacementCounts[subjectName] || 0;
+ 
+             // --- REVISED Definition of Held ---
+             // Held = (Originally Scheduled - Cancelled for this Subject) + (Times this Subject Replaced Others)
+             // Note: A class cancelled *because* it was replaced is already counted in totalCancelled.
+             const totalHeld = Math.max(0, totalScheduled - totalCancelled) + totalTimesWasReplacement;
+ 
+             const subjectRecords = records.filter(r => r.subjectName === subjectName);
+             // Attended counts OCCURRED records (both original and replacement)
+             const attended = subjectRecords.filter(r => r.status === AttendanceStatus.OCCURRED).length;
+             const totalMarked = subjectRecords.filter(r => r.status === AttendanceStatus.OCCURRED || r.status === AttendanceStatus.CANCELLED).length;
+ 
+             // --- Percentage based on REVISED Held ---
+             const attendancePercentage = totalHeld > 0
+                 ? parseFloat(((attended / totalHeld) * 100).toFixed(2))
+                 : null;
+ 
+             subjectStats.push({
+                 subjectName,
+                 courseCode: subjectInfo?.courseCode ?? null, // Get code if available
+                 totalScheduled, // Stays the same
+                 totalMarked,
+                 totalHeldClasses: totalHeld, // Use the revised Held count
+                 attended,
+                 attendancePercentage,
+             });
+ 
+             overallAttended += attended;
+             overallHeld += totalHeld; // Sum up revised held classes
+         }
 
         const overallAttendancePercentage = overallHeld > 0
             ? parseFloat(((overallAttended / overallHeld) * 100).toFixed(2))
             : null;
 
-        console.log(`[Analytics Service BE] Stats calculation complete. Returning result.`);
-        return {
-            streamId,
-            userId: targetUserId,
-            startDate: startDate.toISOString(),
-            endDate: endDate.toISOString(),
-            overallAttendancePercentage,
-            totalAttendedClasses: overallAttended,
-            totalHeldClasses: overallHeld, // Use the DTO field name
-            subjectStats,
-        };
+            console.log(`[Analytics Service BE] Stats calculation complete. Returning result.`);
+            return {
+                streamId, userId: targetUserId, startDate: startDate.toISOString(), endDate: endDate.toISOString(),
+                overallAttendancePercentage, totalAttendedClasses: overallAttended,
+                totalHeldClasses: overallHeld, // Return revised Held count
+                subjectStats,
+            };
     },
 
     /**
@@ -222,6 +242,7 @@ export const analyticsService = {
         console.log(`[Analytics Service BE] Calculating future schedule/cancellations from ${formatDate(today)} to ${formatDate(targetDate)}...`);
         let futureScheduled = 0;
         let futureCancelled = 0;
+        let futureReplacements = 0;
 
         if (!isBefore(targetDate, today)) { // Only if target date is today or future
             // Fetch timetables relevant for the future period
@@ -233,6 +254,14 @@ export const analyticsService = {
 
             // Fetch future cancellations ONCE
             const futureCancelledMap = await attendanceRepository.countCancelledClasses(input.streamId, today, targetDate);
+
+            // --- Fetch future REPLACEMENT instances ---
+            const futureReplacementInstances = await attendanceRepository.findReplacementClasses(input.streamId, today, targetDate);
+            const futureReplacementMap: Record<string, number> = {};
+             for (const rep of futureReplacementInstances) {
+                futureReplacementMap[rep.subjectName] = (futureReplacementMap[rep.subjectName] || 0) + 1;
+             }
+            // ---
 
             const futureDays = getDaysInInterval(today, targetDate);
             const futureScheduledMap: Record<string, number> = {};
@@ -252,19 +281,22 @@ export const analyticsService = {
                 }
             }
 
-            // Sum up scheduled and cancelled based on filter
+            // Sum up based on filter
             if (input.subjectName) {
                 futureScheduled = futureScheduledMap[input.subjectName] || 0;
                 futureCancelled = futureCancelledMap[input.subjectName] || 0;
+                futureReplacements = futureReplacementMap[input.subjectName] || 0; // Count replacements FOR this subject
             } else {
                 futureScheduled = Object.values(futureScheduledMap).reduce((sum, count) => sum + count, 0);
                 futureCancelled = Object.values(futureCancelledMap).reduce((sum, count) => sum + count, 0);
+                // Overall future replacements isn't directly meaningful here, we need futureHeld
+                // futureReplacements = Object.values(futureReplacementMap).reduce((sum, count) => sum + count, 0);
             }
         }
-        console.log(`[Analytics Service BE] Future scheduled: ${futureScheduled}, Future cancelled: ${futureCancelled}`);
+        console.log(`[Analytics Service BE] Future scheduled: ${futureScheduled}, Future cancelled: ${futureCancelled}, Future times as replacement: ${futureReplacements}`);
 
         // Calculate future "Held" classes
-        const futureHeld = Math.max(0, futureScheduled - futureCancelled);
+        const futureHeld = Math.max(0, futureScheduled - futureCancelled) + futureReplacements;
         console.log(`[Analytics Service BE] Future held: ${futureHeld}`);
 
         // 3. Calculate projection based on "Held" classes

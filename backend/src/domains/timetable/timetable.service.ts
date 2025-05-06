@@ -1,12 +1,23 @@
 import { timetableRepository } from './timetable.repository';
+import { attendanceRepository } from '../attendance/attendance.repository';
 import { streamService } from '../stream/stream.service'; // To check permissions
-import { CreateTimetableFrontendInput, TimetableOutput, TimetableEntryOutput, TimetableBasicInfo } from './timetable.dto';
+import {
+    CreateTimetableFrontendInput,
+    TimetableOutput,
+    TimetableEntryOutput,
+    TimetableBasicInfo,
+} from './timetable.dto';
 import { NotFoundError, BadRequestError } from '../../core/errors';
 import { Timetable, TimetableEntry } from '@prisma/client';
-import { formatDate, normalizeDate, getISODayOfWeek, getDaysInInterval, isDateInTimetableRange } from '../../core/utils';
+import {
+    formatDate,
+    normalizeDate,
+    getISODayOfWeek,
+    getDaysInInterval,
+    isDateInTimetableRange,
+} from '../../core/utils';
 import { parseISO } from 'date-fns'; // Import parseISO
 import prisma from '../../infrastructure/prisma';
-
 
 // --- Helper Types ---
 type FlatTimetableEntryInput = Omit<TimetableEntry, 'id' | 'timetableId'>;
@@ -25,7 +36,9 @@ const mapEntryToOutput = (entry: TimetableEntry): TimetableEntryOutput => ({
 });
 
 // Helper to map Prisma Timetable (with entries) to Output DTO
-const mapTimetableToOutput = (timetable: Timetable & { entries: TimetableEntry[] }): TimetableOutput => ({
+const mapTimetableToOutput = (
+    timetable: Timetable & { entries: TimetableEntry[] },
+): TimetableOutput => ({
     id: timetable.id,
     streamId: timetable.streamId,
     name: timetable.name,
@@ -37,10 +50,12 @@ const mapTimetableToOutput = (timetable: Timetable & { entries: TimetableEntry[]
 });
 
 // Helper function to transform nested subjects to flat entries
-const transformSubjectsToEntries = (subjects: CreateTimetableFrontendInput['subjects']): FlatTimetableEntryInput[] => {
+const transformSubjectsToEntries = (
+    subjects: CreateTimetableFrontendInput['subjects'],
+): FlatTimetableEntryInput[] => {
     const entries: FlatTimetableEntryInput[] = [];
-    subjects.forEach(subject => {
-        subject.timeSlots.forEach(slot => {
+    subjects.forEach((subject) => {
+        subject.timeSlots.forEach((slot) => {
             entries.push({
                 dayOfWeek: slot.dayOfWeek,
                 subjectName: subject.subjectName,
@@ -65,13 +80,16 @@ export interface WeeklyScheduleEntry {
     courseCode: string | null;
     startTime: string | null;
     endTime: string | null;
-    // Global status (e.g., if cancelled for everyone) - fetched from attendance maybe?
-    status: 'SCHEDULED' | 'CANCELLED'; // Simplified global status
+    status: 'SCHEDULED' | 'CANCELLED'; // Reflects if cancelled globally
 }
 
 export const timetableService = {
     // --- Create Timetable (Updated to use transformer) ---
-    async createTimetable(streamId: string, input: CreateTimetableFrontendInput, userId: string): Promise<TimetableOutput> {
+    async createTimetable(
+        streamId: string,
+        input: CreateTimetableFrontendInput,
+        userId: string,
+    ): Promise<TimetableOutput> {
         await streamService.ensureAdminAccess(streamId, userId); // Only admins create
 
         const validFrom = normalizeDate(input.validFrom);
@@ -92,7 +110,7 @@ export const timetableService = {
             input.name,
             validFrom,
             validUntil,
-            flatEntries // Pass flat entries to repository
+            flatEntries, // Pass flat entries to repository
         );
 
         return mapTimetableToOutput(newTimetable);
@@ -107,11 +125,14 @@ export const timetableService = {
     },
 
     // --- NEW: Get List for Import Feature ---
-    async getTimetableListForImport(streamId: string, userId: string): Promise<TimetableBasicInfo[]> {
+    async getTimetableListForImport(
+        streamId: string,
+        userId: string,
+    ): Promise<TimetableBasicInfo[]> {
         await streamService.ensureMemberAccess(streamId, userId); // Any member can see list to import
         const timetables = await timetableRepository.findManyForStream(streamId);
         // Map to basic info DTO, converting dates to ISO strings
-        return timetables.map(tt => ({
+        return timetables.map((tt) => ({
             id: tt.id,
             name: tt.name,
             validFrom: tt.validFrom.toISOString(),
@@ -122,22 +143,38 @@ export const timetableService = {
     // --- NEW: Get Weekly Schedule View ---
     // Fetches the scheduled classes for a week based on the active timetable(s)
     // Optionally includes global cancellation status (requires joining/checking attendance)
-    async getWeeklySchedule(streamId: string, startDateStr: string, endDateStr: string, userId: string): Promise<WeeklyScheduleEntry[]> {
+    async getWeeklySchedule(
+        streamId: string,
+        startDateStr: string,
+        endDateStr: string,
+        userId: string,
+    ): Promise<WeeklyScheduleEntry[]> {
         await streamService.ensureMemberAccess(streamId, userId);
         const startDate = normalizeDate(startDateStr);
         const endDate = normalizeDate(endDateStr);
         const schedule: WeeklyScheduleEntry[] = [];
 
         // Fetch potentially active timetables (optimized)
-        const potentiallyActiveTimetables: TimetableWithEntries[] = await prisma.timetable.findMany({
-             where: { streamId, validFrom: { lte: endDate }, OR: [ { validUntil: null }, { validUntil: { gte: startDate } } ] },
-             include: { entries: true },
-             orderBy: { validFrom: 'desc' }
-        });
+        const potentiallyActiveTimetables: TimetableWithEntries[] = await prisma.timetable.findMany(
+            {
+                where: {
+                    streamId,
+                    validFrom: { lte: endDate },
+                    OR: [{ validUntil: null }, { validUntil: { gte: startDate } }],
+                },
+                include: { entries: true },
+                orderBy: { validFrom: 'desc' },
+            },
+        );
 
         // TODO Optional Optimization: Fetch global cancellations for this week/stream once
         // const cancellations = await prisma.attendanceRecord.findMany({ where: { streamId, status: AttendanceStatus.CANCELLED, classDate: { gte: startDate, lte: endDate }, /* Maybe filter by a specific user or check if ANY user has it cancelled? */ }});
         // const cancelledKeys = new Set(cancellations.map(c => `${formatDate(c.classDate)}_${c.subjectName}`)); // Create lookup set
+
+        // --- 2. Fetch the Set of cancelled class keys for the week ONCE ---
+        const cancelledKeys = await attendanceRepository.getCancelledClassKeys(streamId, startDate, endDate);
+        console.log(`[Timetable Service BE] Cancelled Keys for week:`, cancelledKeys); // Log fetched keys
+        // ---
 
         const days = getDaysInInterval(startDate, endDate);
         for (const day of days) {
@@ -148,32 +185,45 @@ export const timetableService = {
                     .filter(entry => entry.dayOfWeek === dayOfWeek)
                     .forEach(entry => {
                         const dateStr = formatDate(day);
-                        // Check cancellation status (simplified)
-                        // const cancellationKey = `${dateStr}_${entry.subjectName}`;
-                        // const status = cancelledKeys.has(cancellationKey) ? 'CANCELLED' : 'SCHEDULED';
-                        const status = 'SCHEDULED'; // Keep simple for now
+                        // --- 3. Check if this specific instance is in the cancelled set ---
+                        const cancellationKey = `${dateStr}_${entry.subjectName}`;
+                        const isGloballyCancelled = cancelledKeys.has(cancellationKey);
+                        const status = isGloballyCancelled ? 'CANCELLED' : 'SCHEDULED';
+                        // ---
 
                         schedule.push({
-                            // id: entry.id, // TimetableEntry ID might not be unique per instance
                             date: dateStr,
                             dayOfWeek: dayOfWeek,
                             subjectName: entry.subjectName,
                             courseCode: entry.courseCode,
                             startTime: entry.startTime,
                             endTime: entry.endTime,
-                            status: status,
+                            status: status, // Set status based on check
                         });
                     });
             }
         }
+        // Sort schedule before returning
+        schedule.sort((a, b) => {
+            const dateComparison = a.date.localeCompare(b.date);
+            if (dateComparison !== 0) return dateComparison;
+            return (a.startTime || '99:99').localeCompare(b.startTime || '99:99');
+        });
         return schedule;
     },
 
-    async getActiveTimetableForDate(streamId: string, dateString: string, userId: string): Promise<TimetableOutput | null> {
+    async getActiveTimetableForDate(
+        streamId: string,
+        dateString: string,
+        userId: string,
+    ): Promise<TimetableOutput | null> {
         await streamService.ensureMemberAccess(streamId, userId);
 
         const targetDate = normalizeDate(dateString);
-        const activeTimetable = await timetableRepository.findActiveByStreamAndDate(streamId, targetDate);
+        const activeTimetable = await timetableRepository.findActiveByStreamAndDate(
+            streamId,
+            targetDate,
+        );
 
         if (!activeTimetable) {
             // It's not an error to have no active timetable, just return null
@@ -188,24 +238,38 @@ export const timetableService = {
      * based on the active timetable(s) during that period.
      * Returns a map of { subjectName: count }.
      */
-    async calculateScheduledClasses(streamId: string, startDate: Date, endDate: Date, userId: string): Promise<Record<string, number>> {
+    async calculateScheduledClasses(
+        streamId: string,
+        startDate: Date,
+        endDate: Date,
+        userId: string,
+    ): Promise<Record<string, number>> {
         // This function needs the same optimization as getWeeklySchedule
         console.log(`[Timetable Service BE] Calculating scheduled classes count for analytics...`);
-        const potentiallyActiveTimetables: TimetableWithEntries[] = await prisma.timetable.findMany({
-            where: { streamId, validFrom: { lte: endDate }, OR: [ { validUntil: null }, { validUntil: { gte: startDate } } ] },
-            include: { entries: true }, // <-- ADD THIS INCLUDE
-            orderBy: { validFrom: 'desc' }
-        });
+        const potentiallyActiveTimetables: TimetableWithEntries[] = await prisma.timetable.findMany(
+            {
+                where: {
+                    streamId,
+                    validFrom: { lte: endDate },
+                    OR: [{ validUntil: null }, { validUntil: { gte: startDate } }],
+                },
+                include: { entries: true }, // <-- ADD THIS INCLUDE
+                orderBy: { validFrom: 'desc' },
+            },
+        );
         const scheduledCounts: Record<string, number> = {};
         const days = getDaysInInterval(startDate, endDate);
         for (const day of days) {
-            const activeTimetable = potentiallyActiveTimetables.find(tt => isDateInTimetableRange(day, tt.validFrom, tt.validUntil));
+            const activeTimetable = potentiallyActiveTimetables.find((tt) =>
+                isDateInTimetableRange(day, tt.validFrom, tt.validUntil),
+            );
             if (activeTimetable) {
                 const dayOfWeek = getISODayOfWeek(day);
                 activeTimetable.entries
-                    .filter(entry => entry.dayOfWeek === dayOfWeek)
-                    .forEach(entry => {
-                        scheduledCounts[entry.subjectName] = (scheduledCounts[entry.subjectName] || 0) + 1;
+                    .filter((entry) => entry.dayOfWeek === dayOfWeek)
+                    .forEach((entry) => {
+                        scheduledCounts[entry.subjectName] =
+                            (scheduledCounts[entry.subjectName] || 0) + 1;
                     });
             }
         }
@@ -222,5 +286,5 @@ export const timetableService = {
         // Check if user is member of the stream this timetable belongs to
         await streamService.ensureMemberAccess(timetable.streamId, userId);
         return mapTimetableToOutput(timetable);
-    }
+    },
 };

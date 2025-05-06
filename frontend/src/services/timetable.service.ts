@@ -17,7 +17,6 @@ export interface SubjectInput {
 }
 
 // Input type for create/update PAYLOAD SENT TO BACKEND SERVICE
-// This structure matches the form state and backend DTO validation schema
 export interface CreateTimetableFrontendInput {
     name: string;
     validFrom: string; // YYYY-MM-DD string
@@ -33,7 +32,7 @@ export interface TimetableOutput {
     validFrom: string; // ISO String from backend
     validUntil: string | null; // ISO String or null from backend
     createdAt: string; // ISO String from backend
-    updatedAt?: string; // ISO String (if applicable)
+    // updatedAt?: string; // ISO String (if applicable)
     entries: Array<{
         id: string;
         timetableId: string;
@@ -142,6 +141,27 @@ export const timetableService = {
         } catch (error: any) {
             console.error(`Error creating timetable for stream ${streamId}:`, error);
             throw new Error(error.message || 'Failed to create timetable');
+        }
+    },
+
+    // --- Get Active Timetable (If still needed elsewhere) ---
+    getActiveTimetableForDate: async (streamId: string, dateString: string): Promise<TimetableOutput | null> => {
+        try {
+            // Assuming backend route exists: GET /streams/:streamId/timetables/active?date=YYYY-MM-DD
+            const response = await apiClient.get<{ status: string; data: { timetable: TimetableOutput } }>(`/streams/${streamId}/timetables/active`, {
+                params: { date: dateString }
+            });
+             if (response.data?.status === 'success' && response.data?.data?.timetable) {
+                 return response.data.data.timetable;
+             }
+             // Handle case where backend sends 404 correctly (axios might throw)
+             return null;
+        } catch (error: any) {
+             if (error.response?.status === 404) {
+                 return null; // No active timetable found is not necessarily an error
+             }
+             console.error(`Error fetching active timetable for stream ${streamId} on ${dateString}:`, error);
+             throw new Error(error.message || 'Failed to fetch active timetable');
         }
     },
 };

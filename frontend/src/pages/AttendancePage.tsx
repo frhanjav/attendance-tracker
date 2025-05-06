@@ -15,14 +15,15 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
-import { Check, X, AlertCircle, HelpCircle, ArrowLeft, ArrowRight, Loader2 } from 'lucide-react'; // Keep icons needed for legend/buttons
+import { Check, X, AlertCircle, HelpCircle, ArrowLeft, ArrowRight, Loader2, Info, Repeat } from 'lucide-react'; // Keep icons needed for legend/buttons
 import toast from 'react-hot-toast';
 
 // --- Attendance Button Component (Simplified) ---
 interface AttendanceButtonProps {
-    eventResource: WeeklyAttendanceViewEntry | null; // Use the view entry type
+    // Use the detailed WeeklyAttendanceViewEntry type
+    viewEntry: WeeklyAttendanceViewEntry | null;
     streamId: string;
-    classDate: Date; // Keep passing Date object here
+    // classDate is implicitly known from viewEntry.date
     currentStatus: AttendanceStatus;
     mutation: UseMutationResult<AttendanceRecordOutput, Error, MarkAttendanceInput>;
     setMutatingEntryKey: React.Dispatch<React.SetStateAction<string | null>>;
@@ -30,26 +31,28 @@ interface AttendanceButtonProps {
 }
 
 const AttendanceButton: React.FC<AttendanceButtonProps> = ({
-    eventResource, streamId, classDate, currentStatus, mutation, setMutatingEntryKey, mutatingEntryKey
+    viewEntry, streamId, currentStatus, mutation, setMutatingEntryKey, mutatingEntryKey
 }) => {
-    if (!eventResource || currentStatus === AttendanceStatus.CANCELLED) {
+    if (!viewEntry || currentStatus === AttendanceStatus.CANCELLED) {
          return <span className="text-xs text-red-600 italic mt-2 block h-7">Cancelled</span>;
     }
 
-    // Use subjectName and potentially startTime for uniqueness if needed
-    const entryKey = `${format(classDate, 'yyyy-MM-dd')}_${eventResource.subjectName}_${eventResource.startTime || 'no-start'}`;
+    // Key should be unique for the specific record being potentially updated
+    const entryKey = viewEntry.recordId || `${viewEntry.date}_${viewEntry.subjectName}_${viewEntry.isReplacement}`;
     const isMutatingThis = mutatingEntryKey === entryKey;
-    const isAttended = currentStatus === AttendanceStatus.OCCURRED;
+    // User attended if their specific status for this entry is OCCURRED
+    const isAttended = viewEntry.status === AttendanceStatus.OCCURRED;
 
     const handleToggle = () => {
         const newStatus = isAttended ? AttendanceStatus.MISSED : AttendanceStatus.OCCURRED;
         setMutatingEntryKey(entryKey);
         mutation.mutate({
             streamId: streamId,
-            subjectName: eventResource.subjectName,
-            courseCode: eventResource.courseCode,
-            classDate: format(classDate, 'yyyy-MM-dd'), // Send YYYY-MM-DD string
+            subjectName: viewEntry.subjectName,
+            courseCode: viewEntry.courseCode,
+            classDate: viewEntry.date, // Send YYYY-MM-DD string
             status: newStatus,
+            // Backend upsert will handle creating/updating the correct record
         });
     };
 
@@ -94,49 +97,48 @@ const AttendancePage: React.FC = () => {
         }
     }, [streamStartDate]);
 
-    // --- Calculate current week ---
-    const currentWeekStart = useMemo(() => streamStartDate ? addDays(streamStartDate, weekOffset * 7) : null, [streamStartDate, weekOffset]);
-    const currentWeekEnd = useMemo(() => currentWeekStart ? endOfWeek(currentWeekStart, { weekStartsOn: 1 }) : null, [currentWeekStart]);
+     // --- Calculate current week ---
+     const currentWeekStart = useMemo(() => streamStartDate ? addDays(streamStartDate, weekOffset * 7) : null, [streamStartDate, weekOffset]);
+     const currentWeekEnd = useMemo(() => currentWeekStart ? endOfWeek(currentWeekStart, { weekStartsOn: 1 }) : null, [currentWeekStart]);
+ 
+     // --- Fetch Weekly Attendance View Data ---
+     const queryKey = ['weeklyAttendanceView', streamId, currentWeekStart ? format(currentWeekStart, 'yyyy-MM-dd') : ''];
+     const { data: weekAttendance = [], isLoading: isLoadingWeek, error } = useQuery<WeeklyAttendanceViewEntry[], Error>({
+         queryKey: queryKey,
+         queryFn: async () => {
+             if (!streamId || !currentWeekStart || !currentWeekEnd) return [];
+             const startDateStr = format(currentWeekStart, 'yyyy-MM-dd');
+             const endDateStr = format(currentWeekEnd, 'yyyy-MM-dd');
+             return await attendanceService.getWeeklyAttendanceView(streamId, startDateStr, endDateStr);
+         },
+         enabled: !!streamId && !!currentWeekStart && !!currentWeekEnd && !isLoadingStream,
+         staleTime: 1000 * 30, // Shorter stale time for attendance
+         refetchOnWindowFocus: true, // Maybe refetch attendance more often
+     });
 
-    // --- Fetch Weekly Attendance View Data ---
-    const queryKey = ['weeklyAttendanceView', streamId, currentWeekStart ? format(currentWeekStart, 'yyyy-MM-dd') : ''];
-    const { data: weekAttendance = [], isLoading: isLoadingWeek, error } = useQuery<WeeklyAttendanceViewEntry[], Error>({
-        queryKey: queryKey,
-        queryFn: async () => {
-            if (!streamId || !currentWeekStart || !currentWeekEnd) return [];
-            const startDateStr = format(currentWeekStart, 'yyyy-MM-dd');
-            const endDateStr = format(currentWeekEnd, 'yyyy-MM-dd');
-            return await attendanceService.getWeeklyAttendanceView(streamId, startDateStr, endDateStr);
-        },
-        enabled: !!streamId && !!currentWeekStart && !!currentWeekEnd && !isLoadingStream,
-        staleTime: 1000 * 60 * 1,
-    });
+    // // --- Derive Subjects for Bulk Entry ---
+    // const subjectsForBulk = useMemo(() => {
+    //     const subjectMap = new Map<string, { name: string; code: string | null }>();
+    //     weekAttendance.forEach(entry => {
+    //         if (!subjectMap.has(entry.subjectName)) {
+    //             subjectMap.set(entry.subjectName, { name: entry.subjectName, code: entry.courseCode || null });
+    //         }
+    //     });
+    //     return Array.from(subjectMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+    // }, [weekAttendance]);
 
-    // --- Derive Subjects for Bulk Entry ---
-    const subjectsForBulk = useMemo(() => {
-        const subjectMap = new Map<string, { name: string; code: string | null }>();
-        weekAttendance.forEach(entry => {
-            if (!subjectMap.has(entry.subjectName)) {
-                subjectMap.set(entry.subjectName, { name: entry.subjectName, code: entry.courseCode || null });
-            }
-        });
-        return Array.from(subjectMap.values()).sort((a, b) => a.name.localeCompare(b.name));
-    }, [weekAttendance]);
-
-    // --- Mutations ---
+    // --- Mark Attendance Mutation ---
     const markAttendanceMutation = useMutation<AttendanceRecordOutput, Error, MarkAttendanceInput>({
         mutationFn: attendanceService.markAttendance,
         onSuccess: (data, variables) => {
             toast.success(`Attendance updated for ${variables.subjectName}`);
             queryClient.invalidateQueries({ queryKey: queryKey }); // Invalidate current week view
             queryClient.invalidateQueries({ queryKey: ['streamAnalytics', streamId] });
-            queryClient.invalidateQueries({ queryKey: ['subjectStats', streamId] }); // Use actual keys if different
+            queryClient.invalidateQueries({ queryKey: ['subjectStats', streamId] }); // Maybe remove if covered by streamAnalytics
         },
         onError: (error) => { toast.error(`Update failed: ${error.message}`); },
         onSettled: () => { setMutatingEntryKey(null); }
     });
-
-
 
     // --- Handlers ---
 
@@ -169,7 +171,7 @@ const AttendancePage: React.FC = () => {
     }, [weekAttendance, currentWeekStart, currentWeekEnd]);
 
     // --- Loading State ---
-    const isLoading = isLoadingStream || (isLoadingWeek && !weekAttendance.length);
+    const isLoading = isLoadingStream || isLoadingWeek;
 
     // --- Render ---
     const weekDaysMap = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -196,26 +198,35 @@ const AttendancePage: React.FC = () => {
             {/* Loading / Error / Content */}
             {isLoading && <div className="text-center py-10 text-gray-500 flex justify-center items-center"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading attendance data...</div>}
             {!isLoading && error && <p className="text-center text-red-500 py-10">Error loading data: {error.message}</p>}
-            {!isLoading && !error && Object.keys(groupedData).length === 0 && (
-                 <p className="text-center text-gray-500 py-10 italic">No classes scheduled for this week.</p>
-            )}
+            {!isLoading && !error && Object.keys(groupedData).length === 0 && ( <p className="text-center text-gray-500 py-10 italic">No classes scheduled or replaced for this week.</p> )}
+            
             {!isLoading && !error && Object.keys(groupedData).length > 0 && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                     {Object.keys(groupedData).map(Number).sort().map(dayOfWeek => (
                         <Card key={dayOfWeek} className="shadow-sm hover:shadow-md transition-shadow flex flex-col">
                             <CardHeader className="pb-3 pt-4 px-4 bg-gray-50 rounded-t-lg border-b">
-                                <CardTitle className="text-base font-semibold text-gray-700">
-                                    {weekDaysMap[dayOfWeek]}, {format(groupedData[dayOfWeek].date, 'MMM dd')}
-                                </CardTitle>
+                                <CardTitle className="text-base font-semibold text-gray-700"> {weekDaysMap[dayOfWeek]}, {format(groupedData[dayOfWeek].date, 'MMM dd')} </CardTitle>
                             </CardHeader>
                             <CardContent className="p-4 space-y-3 flex-grow">
                                 {groupedData[dayOfWeek].entries.length === 0 && <p className="text-xs text-gray-400 italic text-center py-2">No classes</p>}
                                 {groupedData[dayOfWeek].entries.map((entry, index) => (
-                                    <div key={`${entry.subjectName}-${entry.startTime || index}`} className="border-b border-gray-100 pb-3 last:border-b-0 last:pb-0">
+                                    <div key={`${entry.subjectName}-${entry.startTime || index}-${entry.isReplacement}`} className="border-b border-gray-100 pb-3 last:border-b-0 last:pb-0">
                                         <div className="flex justify-between items-start mb-1">
                                             <div>
-                                                <p className={`text-sm font-medium ${entry.status === AttendanceStatus.CANCELLED ? 'line-through text-gray-500' : 'text-gray-900'}`}>{entry.subjectName}</p>
+                                                {/* Indicate if it's a replacement */}
+                                                {entry.isReplacement && (
+                                                    <span className="block text-xs text-blue-600 font-medium flex items-center">
+                                                        <Repeat size={12} className="mr-1"/> Replacement
+                                                    </span>
+                                                )}
+                                                <p className={`text-sm font-medium ${entry.status === AttendanceStatus.CANCELLED ? 'line-through text-gray-500' : 'text-gray-900'}`}>
+                                                    {entry.subjectName}
+                                                </p>
                                                 {entry.courseCode && <p className="text-xs text-gray-500">{entry.courseCode}</p>}
+                                                {/* Show what was replaced */}
+                                                {entry.isReplacement && entry.originalSubjectName && (
+                                                    <p className="text-xs text-gray-500 italic">(Replaced: {entry.originalSubjectName})</p>
+                                                )}
                                             </div>
                                             <p className={`text-xs font-mono whitespace-nowrap pl-1 ${entry.status === AttendanceStatus.CANCELLED ? 'text-gray-400' : 'text-gray-500'}`}>
                                                 {entry.startTime || '--:--'} - {entry.endTime || '--:--'}
@@ -223,9 +234,8 @@ const AttendancePage: React.FC = () => {
                                         </div>
                                         {/* Use simplified AttendanceButton */}
                                         <AttendanceButton
-                                            eventResource={entry} // Pass the whole entry
+                                            viewEntry={entry} // Pass the whole entry
                                             streamId={streamId!}
-                                            classDate={parseISO(entry.date)} // Parse date string back to Date for key generation maybe? Or keep string? Let's use Date.
                                             currentStatus={entry.status}
                                             mutation={markAttendanceMutation}
                                             setMutatingEntryKey={setMutatingEntryKey}
@@ -246,6 +256,7 @@ const AttendancePage: React.FC = () => {
                      <span className="inline-flex items-center"><Check className="w-4 h-4 mr-1 text-green-600"/> Attended</span>
                      <span className="inline-flex items-center"><span className="w-4 h-4 mr-1 text-gray-400 flex items-center justify-center">-</span> Missed (Default)</span>
                      <span className="inline-flex items-center"><X className="w-4 h-4 mr-1 text-red-600"/> Cancelled (by Admin)</span>
+                     <span className="inline-flex items-center"><Repeat size={12} className="w-4 h-4 mr-1 text-blue-600"/> Replacement Class</span>
                  </div>
             </div>
 

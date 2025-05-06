@@ -35,6 +35,7 @@ import { Switch } from '../components/ui/switch'; // Import Switch component
 import toast from 'react-hot-toast';
 import { addDays, format, parseISO } from 'date-fns';
 import { Check, Calendar, TrendingUp, Calculator, Info, Loader2, Edit } from 'lucide-react';
+import { ApiError } from '../lib/apiClient'; // Import ApiError if used in onError
 
 // --- Zod Schema for Calculator Form ---
 const calculatorSchema = z.object({
@@ -49,80 +50,58 @@ type ManualAttendanceInput = Record<string, string>; // { [subjectName]: attende
 const AnalyticsPage: React.FC = () => {
     const { streamId } = useParams<{ streamId: string }>();
     const [projectionResult, setProjectionResult] = useState<AttendanceProjection | null>(null);
-    const [isManualMode, setIsManualMode] = useState(false); // State for toggle
-    const [manualAttendance, setManualAttendance] = useState<ManualAttendanceInput>({}); // State for manual inputs
+    const [isManualMode, setIsManualMode] = useState(false);
+    const [manualAttendance, setManualAttendance] = useState<ManualAttendanceInput>({});
 
     // --- Fetch Analytics Data ---
-    const {
-        data: analyticsData,
-        isLoading,
-        error,
-        status,
-    } = useQuery<StreamAnalyticsData, Error>({
-        queryKey: ['streamAnalytics', streamId], // This key needs invalidation from AttendancePage
+    // Ensure StreamAnalyticsData type includes totalHeldClasses
+    const { data: analyticsData, isLoading, error, status } = useQuery<StreamAnalyticsData, Error>({
+        queryKey: ['streamAnalytics', streamId],
         queryFn: () => analyticsService.getStreamAnalytics(streamId!),
         enabled: !!streamId,
-        staleTime: 1000 * 60 * 5, // 5 minutes
-        refetchOnWindowFocus: false, // Prevent excessive refetching
+        staleTime: 1000 * 60 * 5,
+        refetchOnWindowFocus: false,
     });
 
+    console.log(`[AnalyticsPage] Query Status: ${status}, IsLoading: ${isLoading}, Error: ${error?.message}`);
+
+    // --- Effect to initialize manual inputs ---
     useEffect(() => {
         if (analyticsData?.subjectStats) {
             const initialManualValues: ManualAttendanceInput = {};
-            analyticsData.subjectStats.forEach((stat) => {
-                // Initialize with fetched attended count or empty string
+            analyticsData.subjectStats.forEach(stat => {
                 initialManualValues[stat.subjectName] = String(stat.attended ?? '');
             });
             setManualAttendance(initialManualValues);
         }
+        setProjectionResult(null);
     }, [analyticsData, isManualMode]);
 
     // --- Recalculate Stats Based on Mode ---
     const displayStats = useMemo((): StreamAnalyticsData | null => {
         if (!analyticsData) return null;
-
-        // If not in manual mode, return fetched data directly
         if (!isManualMode) return analyticsData;
 
-        // --- Recalculate in Manual Mode ---
         let overallAttendedManual = 0;
-        let overallHeldManual = 0; // Held = Scheduled - Cancelled (assuming fetched data has correct held count)
+        let overallHeldManual = analyticsData.totalHeldClasses; // Held count doesn't change with manual input
 
-        const manualSubjectStats: SubjectStats[] = analyticsData.subjectStats.map((stat) => {
+        const manualSubjectStats: SubjectStats[] = analyticsData.subjectStats.map(stat => {
             const manualAttendedStr = manualAttendance[stat.subjectName] ?? String(stat.attended);
             const manualAttendedNum = parseInt(manualAttendedStr, 10);
-            // Use fetched attended count if manual input is invalid or empty
-            const attended =
-                !isNaN(manualAttendedNum) && manualAttendedNum >= 0
-                    ? manualAttendedNum
-                    : stat.attended;
-            const held = stat.totalHeldClasses; // Use 'Held' count from fetched data
+            const attended = (!isNaN(manualAttendedNum) && manualAttendedNum >= 0) ? manualAttendedNum : stat.attended;
+            const cappedAttended = Math.min(attended, stat.totalHeldClasses); // Cap at held
+            const held = stat.totalHeldClasses;
 
-            const percentage = held > 0 ? parseFloat(((attended / held) * 100).toFixed(2)) : null;
+            const percentage = held > 0 ? parseFloat(((cappedAttended / held) * 100).toFixed(2)) : null;
+            overallAttendedManual += cappedAttended;
 
-            overallAttendedManual += attended;
-            overallHeldManual += held;
-
-            return {
-                ...stat, // Keep other fetched stats like scheduled, marked
-                attended: attended, // Override attended count
-                attendancePercentage: percentage, // Recalculate percentage
-            };
+            return { ...stat, attended: cappedAttended, attendancePercentage: percentage };
         });
 
-        const overallPercentageManual =
-            overallHeldManual > 0
-                ? parseFloat(((overallAttendedManual / overallHeldManual) * 100).toFixed(2))
-                : null;
+        const overallPercentageManual = overallHeldManual > 0 ? parseFloat(((overallAttendedManual / overallHeldManual) * 100).toFixed(2)) : null;
 
-        // Return a new object with recalculated values
-        return {
-            ...analyticsData,
-            totalAttendedClasses: overallAttendedManual,
-            totalHeldClasses: overallHeldManual, // Keep original held count
-            overallAttendancePercentage: overallPercentageManual,
-            subjectStats: manualSubjectStats,
-        };
+        return { ...analyticsData, totalAttendedClasses: overallAttendedManual, overallAttendancePercentage: overallPercentageManual, subjectStats: manualSubjectStats };
+
     }, [analyticsData, isManualMode, manualAttendance]);
 
     // --- Calculator Form Setup ---

@@ -44,6 +44,25 @@ export const CancelClassSchema = z.object({
 export type CancelClassInput = z.infer<typeof CancelClassSchema>['body'];
 // --- End Cancel Class Schema ---
 
+// --- Input Schema for Replace Class Request Body ---
+export const ReplaceClassSchema = z.object({
+    body: z.object({
+        streamId: z.string().cuid(),
+        classDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        // Original class details to identify it
+        originalSubjectName: z.string().min(1),
+        originalStartTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/).optional().nullable(),
+        // Replacement class details (selected from existing subjects)
+        replacementSubjectName: z.string().min(1),
+        replacementCourseCode: z.string().optional().nullable(),
+        // Optional: Replacement times if they differ
+        replacementStartTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/).optional().nullable(),
+        replacementEndTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/).optional().nullable(),
+    })
+});
+export type ReplaceClassInput = z.infer<typeof ReplaceClassSchema>['body'];
+// --- End Replace Class Schema ---
+
 // Output DTO for a single attendance record
 export const AttendanceRecordOutputSchema = z.object({
     id: z.string().cuid(),
@@ -54,25 +73,45 @@ export const AttendanceRecordOutputSchema = z.object({
     classDate: z.string().datetime({ message: "Invalid ISO datetime format" }),
     status: z.nativeEnum(AttendanceStatus),
     markedAt: z.string().datetime({ message: "Invalid ISO datetime format" }),
+    isReplacement: z.boolean(),
+    originalSubjectName: z.string().nullable(),
+    originalCourseCode: z.string().nullable(),
+    originalStartTime: z.string().nullable(),
+    originalEndTime: z.string().nullable(),
 });
 export type AttendanceRecordOutput = z.infer<typeof AttendanceRecordOutputSchema>;
 
+export type WeeklyAttendanceViewEntry = {
+    date: string; // YYYY-MM-DD
+    dayOfWeek: number;
+    subjectName: string; // Could be original or replacement subject
+    courseCode: string | null;
+    startTime: string | null;
+    endTime: string | null;
+    status: AttendanceStatus; // User's status or CANCELLED
+    recordId?: string;
+    // Add replacement flags/info for UI rendering
+    isReplacement?: boolean;
+    originalSubjectName?: string | null;
+    isCancelled?: boolean; // Explicit flag if status isn't enough
+};
+
 // Output DTO for calendar view events
 // Tailor this to what your calendar component needs (e.g., react-big-calendar)
-export const CalendarEventOutputSchema = z.object({
-    title: z.string(), // e.g., "CS101 - Occurred" or "MATH202 - Cancelled"
-    start: z.date(),   // Start date/time of the event
-    end: z.date(),     // End date/time of the event (can be same as start for all-day)
-    allDay: z.boolean().optional().default(true),
-    resource: z.object({ // Optional: Additional data associated with the event
-        recordId: z.string().cuid().optional(),
-        streamId: z.string().cuid(),
-        subjectName: z.string(),
-        courseCode: z.string().optional().nullable(),
-        status: z.nativeEnum(AttendanceStatus),
-    }).optional(),
-});
-export type CalendarEventOutput = z.infer<typeof CalendarEventOutputSchema>;
+// export const CalendarEventOutputSchema = z.object({
+//     title: z.string(), // e.g., "CS101 - Occurred" or "MATH202 - Cancelled"
+//     start: z.date(),   // Start date/time of the event
+//     end: z.date(),     // End date/time of the event (can be same as start for all-day)
+//     allDay: z.boolean().optional().default(true),
+//     resource: z.object({ // Optional: Additional data associated with the event
+//         recordId: z.string().cuid().optional(),
+//         streamId: z.string().cuid(),
+//         subjectName: z.string(),
+//         courseCode: z.string().optional().nullable(),
+//         status: z.nativeEnum(AttendanceStatus),
+//     }).optional(),
+// });
+// export type CalendarEventOutput = z.infer<typeof CalendarEventOutputSchema>;
 
 
 // Schema for querying calendar data

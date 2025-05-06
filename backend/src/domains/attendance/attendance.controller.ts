@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { attendanceService } from './attendance.service';
-import { MarkAttendanceInput, BulkAttendanceInput, CancelClassInput, CancelClassSchema } from './attendance.dto';
+import { MarkAttendanceInput, BulkAttendanceInput, CancelClassInput, ReplaceClassInput, ReplaceClassSchema } from './attendance.dto';
 import { ParsedQs } from 'qs';
 import { z } from 'zod'; // Import Zod if needed for inline validation (though schema is better)
 import { AuthenticatedUser } from '@/middleware/auth.middleware';
@@ -75,6 +75,19 @@ export const attendanceController = {
             const adminUserId = adminUser.id;
             // Input validation is handled by validateRequest(CancelClassSchema) middleware
             const result = await attendanceService.cancelClassGlobally(req.body, adminUserId);
+            res.status(200).json({ status: 'success', data: result });
+        } catch (error) {
+            next(error);
+        }
+    },
+
+    // --- NEW: Handle Replace Class Request ---
+    async handleReplaceClassGlobally(req: Request<{}, {}, ReplaceClassInput>, res: Response, next: NextFunction) {
+        try {
+            const adminUserId = (req.user as AuthenticatedUser).id; // Assert user type
+            if (!adminUserId) throw new Error("Authentication error");
+            // Validation handled by middleware
+            const result = await attendanceService.replaceClassGlobally(req.body, adminUserId);
             res.status(200).json({ status: 'success', data: result });
         } catch (error) {
             next(error);

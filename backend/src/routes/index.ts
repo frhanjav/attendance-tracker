@@ -25,7 +25,7 @@ import {
     MarkAttendanceSchema,
     BulkAttendanceSchema,
     CancelClassSchema,
-    GetAttendanceRecordsSchema,
+    ReplaceClassSchema,
 } from '../domains/attendance/attendance.dto';
 import { AttendanceCalculatorInputSchema } from '../domains/analytics/analytics.dto'; // Add GetAnalyticsSchema if using validation middleware
 
@@ -167,17 +167,17 @@ router.get(
     timetableController.handleGetWeeklySchedule, // Add this controller method
 );
 
-// router.get(
-//     '/streams/:streamId/timetables/active',
-//     validateRequest(
-//         z.object({
-//             // Combine validation for params and query
-//             params: TimetableStreamParamsSchema,
-//             query: TimetableActiveQuerySchema,
-//         }),
-//     ),
-//     timetableController.handleGetActiveTimetable, // Ensure this controller exists and works
-// );
+router.get(
+    '/streams/:streamId/timetables/active',
+    validateRequest(
+        z.object({
+            // Combine validation for params and query
+            params: TimetableStreamParamsSchema,
+            query: TimetableActiveQuerySchema,
+        }),
+    ),
+    timetableController.handleGetActiveTimetable, // Ensure this controller exists and works
+);
 
 // Get Details
 router.get(
@@ -205,6 +205,9 @@ router.post(
     validateRequest(CancelClassSchema),
     attendanceController.handleCancelClassGlobally,
 ); // Added validation
+
+// NEW: Replace Class Route (Admin)
+router.post('/attendance/replace', validateRequest(ReplaceClassSchema), attendanceController.handleReplaceClassGlobally);
 
 // NEW: Get Weekly Attendance View (Student)
 router.get(

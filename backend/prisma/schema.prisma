@@ -112,6 +112,14 @@ model AttendanceRecord {
   status      AttendanceStatus @default(MISSED)
   markedAt    DateTime @updatedAt // When the status was last changed
 
+    // --- Fields for Replacement Tracking ---
+  isReplacement   Boolean @default(false) // Is this record for a class that replaced another?
+  originalSubjectName String? // If isReplacement=true, what subject was originally scheduled?
+  originalCourseCode String?
+  originalStartTime String? // Optional: If time also changed or needed for uniqueness
+  originalEndTime String?   // Optional
+  // --- End Replacement Fields ---
+  
   // Optional: Track who marked it if needed (e.g., distinguishing admin actions)
   // markedByUserId String?
 
@@ -128,6 +136,7 @@ model AttendanceRecord {
   @@index([streamId])
   @@index([classDate])
   @@index([status]) // Index status for faster querying
+  @@index([isReplacement])
 }
 
 // For bulk entry feature

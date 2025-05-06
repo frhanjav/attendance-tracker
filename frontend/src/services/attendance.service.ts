@@ -12,18 +12,32 @@ export enum AttendanceStatus {
 
 // Type for calendar events expected by react-big-calendar
 // Match the CalendarEventOutputSchema from backend DTO
-export interface CalendarEvent {
-    title: string;
-    start: Date; // Use Date objects on frontend
-    end: Date;
-    allDay?: boolean;
-    resource?: { // Match backend resource structure
-        recordId?: string;
-        streamId: string;
-        subjectName: string;
-        courseCode?: string | null;
-        status: AttendanceStatus; // Use the enum/string type
-    };
+// export interface CalendarEvent {
+//     title: string;
+//     start: Date; // Use Date objects on frontend
+//     end: Date;
+//     allDay?: boolean;
+//     resource?: { // Match backend resource structure
+//         recordId?: string;
+//         streamId: string;
+//         subjectName: string;
+//         courseCode?: string | null;
+//         status: AttendanceStatus; // Use the enum/string type
+//     };
+// }
+
+export interface WeeklyAttendanceViewEntry { // Export this type too
+    date: string; // YYYY-MM-DD
+    dayOfWeek: number;
+    subjectName: string;
+    courseCode: string | null;
+    startTime: string | null;
+    endTime: string | null;
+    status: AttendanceStatus;
+    recordId?: string;
+    isReplacement?: boolean;
+    originalSubjectName?: string | null;
+    // isCancelled: boolean; // We can infer cancelled from status: AttendanceStatus.CANCELLED
 }
 
 // Input for marking attendance
@@ -43,7 +57,27 @@ export interface BulkAttendanceInput {
     attendance: Record<string, number>; // { [subjectName]: attendedCount }
 }
 
-// Response type for marking attendance (matches AttendanceRecordOutput)
+// Input type for cancelling class (sent TO backend)
+export interface CancelClassInput {
+    streamId: string;
+    classDate: string; // YYYY-MM-DD
+    subjectName: string;
+    startTime?: string | null; // Optional identifier
+}
+
+// Input type for replacing class (sent TO backend)
+export interface ReplaceClassInput {
+    streamId: string;
+    classDate: string; // YYYY-MM-DD
+    originalSubjectName: string;
+    originalStartTime?: string | null;
+    replacementSubjectName: string;
+    replacementCourseCode?: string | null;
+    replacementStartTime?: string | null; // Optional new times
+    replacementEndTime?: string | null;
+}
+
+// Type for a single attendance record returned FROM backend API
 export interface AttendanceRecordOutput {
     id: string;
     userId: string;
@@ -53,41 +87,33 @@ export interface AttendanceRecordOutput {
     classDate: string; // API returns ISO string
     status: AttendanceStatus;
     markedAt: string; // API returns ISO string
-}
-
-export interface WeeklyAttendanceViewEntry { // Export this type too
-    date: string; // YYYY-MM-DD
-    dayOfWeek: number;
-    subjectName: string;
-    courseCode: string | null;
-    startTime: string | null;
-    endTime: string | null;
-    status: AttendanceStatus;
-    recordId?: string;
+    // Add replacement fields if backend DTO includes them
+    isReplacement?: boolean;
+    originalSubjectName?: string | null;
 }
 
 // Type for the raw calendar event data received FROM backend API
 // Matches CalendarEventOutputSchema from backend DTO (dates are strings)
-interface RawCalendarEvent {
-  title: string;
-  start: string; // ISO String from backend
-  end: string;   // ISO String from backend
-  allDay?: boolean;
-  resource?: {
-      recordId?: string;
-      streamId: string;
-      subjectName: string;
-      courseCode?: string | null;
-      status: AttendanceStatus; // Use the imported enum
-  };
-}
+// interface RawCalendarEvent {
+//   title: string;
+//   start: string; // ISO String from backend
+//   end: string;   // ISO String from backend
+//   allDay?: boolean;
+//   resource?: {
+//       recordId?: string;
+//       streamId: string;
+//       subjectName: string;
+//       courseCode?: string | null;
+//       status: AttendanceStatus; // Use the imported enum
+//   };
+// }
 
 // Response type for calendar data
-interface CalendarDataResponse {
-    status: string;
-    results: number;
-    data: { events: RawCalendarEvent[] }; // Backend should return dates as ISO strings
-}
+// interface CalendarDataResponse {
+//     status: string;
+//     results: number;
+//     data: { events: RawCalendarEvent[] }; // Backend should return dates as ISO strings
+// }
 
 // Expected API response structure for POST /attendance/mark
 interface MarkAttendanceResponse {
@@ -100,6 +126,8 @@ interface BulkAttendanceResponse {
     status: string;
     data: { message: string; entriesCreated: number };
 }
+
+interface ClassUpdateResponse { status: string; data: { message: string; updatedCount: number }; }
 
 interface WeeklyAttendanceViewResponse { // For the new endpoint
     status: string;
@@ -140,6 +168,19 @@ export const attendanceService = {
            throw new Error(error.message || 'Failed to cancel class');
        }
    },
+
+   replaceClassGlobally: async (data: ReplaceClassInput): Promise<{ message: string; updatedCount: number }> => {
+    try {
+        const response = await apiClient.post<ClassUpdateResponse>('/attendance/replace', data);
+         if (response.data?.status !== 'success' || !response.data?.data) {
+            throw new Error("Invalid API response structure for replace class.");
+        }
+        return response.data.data;
+    } catch (error: any) {
+        console.error("Error replacing class:", error);
+        throw new Error(error.message || 'Failed to replace class');
+    }
+},
 
     /**
      * Sends a request to mark the status of a specific class instance.
