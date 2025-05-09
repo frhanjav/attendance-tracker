@@ -8,12 +8,6 @@ export default defineConfig(({ command, mode }) => {
 
     return {
         plugins: [react(), tailwindcss()],
-        define: {
-            'console.log': isProduction ? 'undefined' : 'console.log',
-            'console.debug': isProduction ? 'undefined' : 'console.debug',
-            'console.warn': 'console.warn',
-            'console.error': 'console.error',
-        },
         resolve: {
             alias: {
                 '@': path.resolve(__dirname, './src'),
@@ -21,6 +15,15 @@ export default defineConfig(({ command, mode }) => {
         },
         build: {
             sourcemap: mode !== 'production',
+            minify: 'terser',
+            terserOptions: {
+                compress: {
+                    // Remove console.log and console.debug, but keep console.warn and console.error
+                    pure_funcs: isProduction ? ['console.log', 'console.debug'] : [],
+                    drop_console: false, // Set to true to remove ALL console statements
+                    drop_debugger: isProduction,
+                },
+            },
         },
         server: {
             port: 5173,
