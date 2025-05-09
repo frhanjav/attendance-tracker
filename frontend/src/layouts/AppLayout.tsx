@@ -1,44 +1,40 @@
-import React, { useState } from 'react'; // Import useState
+import React, { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
 import CreateStreamModal from '../components/modals/CreateStreamModal';
 import JoinStreamModal from '../components/modals/JoinStreamModal';
+import useUIStore from '../stores/uiStore';
 
 const AppLayout: React.FC = () => {
-    const [isCreateModalOpen, setCreateModalOpen] = useState(false);
-    const [isJoinModalOpen, setJoinModalOpen] = useState(false);
+    const isCreateModalOpen = useUIStore((state) => state.isCreateStreamModalOpen);
+    const closeCreateStreamModal = useUIStore((state) => state.closeCreateStreamModal);
+    const isJoinModalOpen = useUIStore((state) => state.isJoinStreamModalOpen);
+    const closeJoinStreamModal = useUIStore((state) => state.closeJoinStreamModal);
 
     return (
-        <div className="min-h-screen flex flex-col bg-gray-100"> {/* Added bg color */}
+        <div className="min-h-screen flex flex-col bg-gray-100">
             <Navbar />
             <div className="flex flex-1 overflow-hidden"> {/* Allow content to scroll */}
 
                 {/* Sidebar */}
-                <div className="hidden md:flex md:flex-shrink-0">
-                <Sidebar
-                    openCreateStreamModal={() => setCreateModalOpen(true)}
-                    openJoinStreamModal={() => setJoinModalOpen(true)}
-                />
-                </div>
-
+                <div className="hidden md:flex md:flex-shrink-0"><Sidebar /></div>
+                
                 {/* Main Content Area */}
                 <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-                    {/* Container to constrain content width */}
                     <div className="container mx-auto max-w-7xl">
-                         <Outlet /> {/* Nested routes render here */}
+                         <Outlet />
                     </div>
                 </main>
             </div>
 
             <CreateStreamModal
                 isOpen={isCreateModalOpen}
-                onClose={() => setCreateModalOpen(false)}
-                // streamId might not be needed if creating globally, adjust modal component
+                onClose={closeCreateStreamModal}
             />
              <JoinStreamModal
                 isOpen={isJoinModalOpen}
-                onClose={() => setJoinModalOpen(false)}
+                onClose={closeJoinStreamModal}
              />
 
         </div>

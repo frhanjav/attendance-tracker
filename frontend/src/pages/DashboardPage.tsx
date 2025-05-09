@@ -12,8 +12,12 @@ import {
     CardHeader,
     CardTitle,
 } from '../components/ui/card';
+import useUIStore from '../stores/uiStore';
 
 const DashboardPage: React.FC = () => {
+    const openCreateStreamModal = useUIStore((state) => state.openCreateStreamModal);
+    const openJoinStreamModal = useUIStore((state) => state.openJoinStreamModal);
+
     // Fetch user's streams
     const {
         data: streams,
@@ -29,6 +33,18 @@ const DashboardPage: React.FC = () => {
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-center gap-3">
                 <h1 className="text-3xl font-bold text-gray-800">Dashboard</h1>
+                <div className="flex space-x-2">
+                    <Button size="sm" onClick={openCreateStreamModal} variant='default' className="shadow-sm"> {/* Use store action */}
+                        <Plus size={16} className="mr-1 sm:mr-2" />
+                        <span className="hidden sm:inline">Create Stream</span>
+                        <span className="sm:hidden">Create</span>
+                    </Button>
+                    <Button size="sm" onClick={openJoinStreamModal} variant='outline' className="shadow-sm"> {/* Use store action */}
+                        <LogIn size={16} className="mr-1 sm:mr-2" />
+                        <span className="hidden sm:inline">Join Stream</span>
+                        <span className="sm:hidden">Join</span>
+                    </Button>
+                </div>
             </div>
 
             {/* Stream Cards Grid */}
@@ -95,8 +111,6 @@ const DashboardPage: React.FC = () => {
                         <p className="text-sm text-gray-500 mb-4">
                             Create a new stream or join one using a code from the sidebar.
                         </p>
-                        {/* Optional: Add buttons here again if sidebar ones aren't prominent enough */}
-                        {/* <div className="flex justify-center space-x-3"> ... buttons ... </div> */}
                     </div>
                 )}
             </div>

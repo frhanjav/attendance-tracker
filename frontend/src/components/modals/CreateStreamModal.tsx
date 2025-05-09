@@ -14,7 +14,7 @@ import {
     DialogTitle,
     DialogDescription,
     DialogFooter,
-    DialogClose, // Optional: for explicit close button
+    DialogClose,
 } from "../../components/ui/dialog";
 import toast from 'react-hot-toast';
 import { Loader2 } from 'lucide-react';
@@ -29,7 +29,6 @@ type CreateStreamFormInputs = z.infer<typeof createStreamSchema>;
 interface CreateStreamModalProps {
     isOpen: boolean;
     onClose: () => void;
-    // streamId is not needed for creating a stream
 }
 
 const CreateStreamModal: React.FC<CreateStreamModalProps> = ({ isOpen, onClose }) => {

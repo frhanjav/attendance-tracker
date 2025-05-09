@@ -1,19 +1,17 @@
-// frontend/src/components/Sidebar.tsx
 import React, { useState, useEffect } from 'react';
 import { Link, NavLink, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { streamService } from '../services/stream.service'; // Assuming service exists
+import { streamService } from '../services/stream.service';
 import { Button } from '../components/ui/button';
-import { ScrollArea } from "../components/ui/scroll-area"; // Use shadcn ScrollArea
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../components/ui/accordion"; // Use shadcn Accordion
-import { LayoutDashboard, PlusCircle, LogIn, BookOpen, CheckSquare, BarChartHorizontal } from 'lucide-react'; // Icons
+import { ScrollArea } from "../components/ui/scroll-area";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../components/ui/accordion";
+import { LayoutDashboard, PlusCircle, LogIn, BookOpen, CheckSquare, BarChartHorizontal } from 'lucide-react';
+import useUIStore from '../stores/uiStore';
 
-interface SidebarProps {
-    openCreateStreamModal: () => void;
-    openJoinStreamModal: () => void;
-}
+const Sidebar: React.FC = () => {
+    const openCreateStreamModal = useUIStore((state) => state.openCreateStreamModal);
+    const openJoinStreamModal = useUIStore((state) => state.openJoinStreamModal);
 
-const Sidebar: React.FC<SidebarProps> = ({ openCreateStreamModal, openJoinStreamModal }) => {
     const { streamId: activeStreamId } = useParams<{ streamId?: string }>(); // Get active streamId from URL
     const [openAccordionItem, setOpenAccordionItem] = useState<string | undefined>(activeStreamId);
 
