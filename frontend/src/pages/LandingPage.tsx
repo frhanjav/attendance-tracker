@@ -238,11 +238,11 @@ const LandingPage: React.FC = () => {
                                             Features
                                         </a>
                                     </li>
-                                    <li>
+                                    {/* <li>
                                         <a href="#" className="text-gray-400 hover:text-white">
                                             Pricing
                                         </a>
-                                    </li>
+                                    </li> */}
                                     <li>
                                         <a href="#" className="text-gray-400 hover:text-white">
                                             FAQ
@@ -256,11 +256,11 @@ const LandingPage: React.FC = () => {
                                     Company
                                 </h3>
                                 <ul className="space-y-2">
-                                    <li>
+                                    {/* <li>
                                         <a href="#" className="text-gray-400 hover:text-white">
                                             About
                                         </a>
-                                    </li>
+                                    </li> */}
                                     <li>
                                         <a
                                             href="https://farhan.leverage.blog/"

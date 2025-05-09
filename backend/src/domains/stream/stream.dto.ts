@@ -9,6 +9,7 @@ export const StreamSchema = z.object({
     ownerId: z.string().cuid(),
     createdAt: z.date(),
     updatedAt: z.date(),
+    isArchived: z.boolean(),
 });
 
 // Input for creating a new stream
@@ -31,8 +32,9 @@ export type JoinStreamInput = z.infer<typeof JoinStreamSchema>['body'];
 export const StreamBasicOutputSchema = StreamSchema.pick({
     id: true,
     name: true,
-    streamCode: true, // Include code for sharing
+    streamCode: true,
     ownerId: true,
+    isArchived: true,
 });
 export type StreamBasicOutput = z.infer<typeof StreamBasicOutputSchema>;
 

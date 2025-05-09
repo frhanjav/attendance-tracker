@@ -123,18 +123,27 @@ export const streamRepository = {
         });
     },
 
-    async findStreamsByUserId(userId: string): Promise<(StreamMembership & { stream: Stream })[]> {
-        // Find memberships and include the associated stream details
+    async findStreamsByUserId(userId: string, includeArchived: boolean = false): Promise<(StreamMembership & { stream: Stream })[]> {
+        const streamFilter: Prisma.StreamWhereInput = {}; // Start with empty filter
+        // if (!includeArchived) { // Only add the filter if we DON'T want archived
+        //     streamFilter.isArchived = false;
+        // }
+        if (includeArchived) { // If true, we want ONLY archived
+            streamFilter.isArchived = true;
+        } else { // If false, we want ONLY active
+            streamFilter.isArchived = false;
+        }
+        // If includeArchived is true, streamFilter remains empty for isArchived, so all are fetched
+    
         return prisma.streamMembership.findMany({
-            where: { userId },
+            where: {
+                userId,
+                stream: streamFilter, // Apply the conditional filter here
+            },
             include: {
-                stream: true, // Include the full stream object
+                stream: true,
             },
-            orderBy: {
-                stream: {
-                    name: 'asc', // Order streams alphabetically
-                },
-            },
+            orderBy: { stream: { name: 'asc' } }
         });
     },
 
@@ -153,13 +162,46 @@ export const streamRepository = {
         return result as StreamMemberWithSelectedUser[];
     },
 
-    // --- NEW: Method to get just member user IDs ---
     async findStreamMemberUserIds(streamId: string): Promise<string[]> {
         const members = await prisma.streamMembership.findMany({
             where: { streamId },
             select: { userId: true }, // Select only the userId
         });
         return members.map((m) => m.userId);
+    },
+
+    async removeMember(userId: string, streamId: string): Promise<StreamMembership | null> {
+        try {
+            return await prisma.streamMembership.delete({
+                where: {
+                    userId_streamId: { userId, streamId }
+                }
+            });
+        } catch (error: any) {
+            if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+                return null;
+            }
+            throw error;
+        }
+    },
+
+    async setArchiveStatus(streamId: string, ownerId: string, isArchived: boolean): Promise<Stream | null> {
+        try {
+            return await prisma.stream.update({
+                where: {
+                    id: streamId,
+                    ownerId: ownerId,
+                },
+                data: {
+                    isArchived: isArchived,
+                }
+            });
+        } catch (error: any) {
+             if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+                return null;
+            }
+            throw error;
+        }
     },
 
     async isUserMember(userId: string, streamId: string): Promise<boolean> {

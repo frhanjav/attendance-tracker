@@ -125,7 +125,10 @@ router.get(
     '/streams/:streamId',
     validateRequest(z.object({ params: TimetableStreamParamsSchema })),
     streamController.handleGetStreamDetails,
-); // Added param validation
+);
+router.post('/streams/:streamId/leave', validateRequest(z.object({ params: TimetableStreamParamsSchema })), streamController.handleLeaveStream);
+router.post('/streams/:streamId/archive', validateRequest(z.object({ params: TimetableStreamParamsSchema })), streamController.handleArchiveStream);
+router.post('/streams/:streamId/unarchive', validateRequest(z.object({ params: TimetableStreamParamsSchema })), streamController.handleUnarchiveStream);
 
 // --- Timetable Routes ---
 
@@ -149,22 +152,21 @@ router.get(
 router.get(
     '/timetables/list/:streamId', // New route distinct from the main list maybe?
     validateRequest(z.object({ params: TimetableStreamParamsSchema })),
-    timetableController.handleGetTimetableListForImport, // Add this controller method
+    timetableController.handleGetTimetableListForImport,
 );
 // NEW: Get Weekly Schedule View
 router.get(
-    '/timetables/weekly/:streamId', // Example route
+    '/timetables/weekly/:streamId',
     validateRequest(
         z.object({
             params: TimetableStreamParamsSchema,
-            // Add query param validation for startDate, endDate
             query: z.object({
                 startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
                 endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
             }),
         }),
     ),
-    timetableController.handleGetWeeklySchedule, // Add this controller method
+    timetableController.handleGetWeeklySchedule,
 );
 
 router.get(

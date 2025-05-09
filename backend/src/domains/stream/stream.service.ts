@@ -8,12 +8,14 @@ import { Stream, User } from '@prisma/client'; // <-- Import Stream and User
 // --- Update StreamDetailedOutput DTO ---
 
 // Helper to map Prisma Stream (or parts) to StreamBasicOutput DTO
-const mapStreamToBasicOutput = (stream: Partial<Stream>): StreamBasicOutput => ({
-    id: stream.id!, // Assume ID is always present
-    name: stream.name!,
-    streamCode: stream.streamCode!,
-    ownerId: stream.ownerId!,
+const mapStreamToBasicOutput = (stream: Stream): StreamBasicOutput => ({
+    id: stream.id,
+    name: stream.name,
+    streamCode: stream.streamCode,
+    ownerId: stream.ownerId,
+    isArchived: stream.isArchived,
 });
+
 
 // Helper to map repository's MembershipWithSelectedUser to StreamMemberOutput DTO
 const mapMembershipToOutput = (membership: StreamMemberWithSelectedUser): StreamMemberOutput => ({
@@ -50,15 +52,12 @@ export const streamService = {
         return mapStreamToBasicOutput(stream); // Return basic info of the joined stream
     },
 
-    async getMyStreams(userId: string): Promise<StreamBasicOutput[]> {
-        const memberships = await streamRepository.findStreamsByUserId(userId);
-        // Extract and map the stream object from each membership
+    async getMyStreams(userId: string, includeArchived: boolean = false): Promise<StreamBasicOutput[]> {
+        const memberships = await streamRepository.findStreamsByUserId(userId, includeArchived);
         return memberships.map(m => mapStreamToBasicOutput(m.stream));
     },
 
     // Adjust StreamDetailedOutput DTO to include optional streamStartDate: string (ISO)
-    // --- Updated getStreamDetails ---
-
     async getStreamDetails(streamId: string, userId: string): Promise<StreamDetailedOutput> {
         await this.ensureMemberAccess(streamId, userId);
         const stream = await streamRepository.findById(streamId);
@@ -71,13 +70,50 @@ export const streamService = {
 
         const result: StreamDetailedOutput = {
             id: stream.id, name: stream.name, streamCode: stream.streamCode, ownerId: stream.ownerId,
+            isArchived: stream.isArchived,
             owner: { id: stream.owner.id, name: stream.owner.name ?? null, email: stream.owner.email },
             members: stream.members.map(mapMembershipToOutput), // Use the corrected mapper
             streamStartDate: earliestValidFrom ? earliestValidFrom.toISOString() : null,
         };
         return result;
     },
-    // --- End Updated getStreamDetails ---
+
+    // --- NEW: Leave Stream (for members) ---
+    async leaveStream(streamId: string, userId: string): Promise<{ message: string }> {
+        const stream = await streamRepository.findById(streamId); // Fetch stream to check ownership
+        if (!stream) {
+            throw new NotFoundError("Stream not found.");
+        }
+        // Prevent owner from leaving their own stream; they must archive/delete or transfer ownership (not implemented)
+        if (stream.ownerId === userId) {
+            throw new ForbiddenError("Stream owner cannot leave the stream. You can archive or delete it instead.");
+        }
+
+        const membership = await streamRepository.removeMember(userId, streamId);
+        if (!membership) {
+            throw new NotFoundError("You are not a member of this stream or have already left.");
+        }
+        return { message: "Successfully left the stream." };
+    },
+
+    // --- NEW: Archive Stream (for owner) ---
+    async archiveStream(streamId: string, ownerId: string): Promise<StreamBasicOutput> {
+        const updatedStream = await streamRepository.setArchiveStatus(streamId, ownerId, true);
+        if (!updatedStream) {
+            // Could be not found OR user is not the owner
+            throw new ForbiddenError("Stream not found or you are not the owner.");
+        }
+        return mapStreamToBasicOutput(updatedStream);
+    },
+
+    // --- NEW: Unarchive Stream (for owner) ---
+    async unarchiveStream(streamId: string, ownerId: string): Promise<StreamBasicOutput> {
+        const updatedStream = await streamRepository.setArchiveStatus(streamId, ownerId, false);
+        if (!updatedStream) {
+            throw new ForbiddenError("Stream not found or you are not the owner.");
+        }
+        return mapStreamToBasicOutput(updatedStream);
+    },
 
     // --- NEW: Get stream members (used by attendance service) ---
     async getStreamMembers(streamId: string): Promise<StreamMemberOutput[]> {

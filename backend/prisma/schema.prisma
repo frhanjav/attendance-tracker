@@ -43,6 +43,7 @@ model Stream {
   name       String
   streamCode String   @unique @default(cuid()) // Simple unique code for joining
   ownerId    String
+  isArchived Boolean  @default(false)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -56,6 +57,7 @@ model Stream {
   classOverrides    ClassOverride[]
 
   @@index([ownerId])
+  @@index([isArchived])
 }
 
 // Join table for users and streams

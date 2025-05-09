@@ -1,15 +1,13 @@
 import apiClient from '../lib/apiClient';
 
-// Define types for Stream data (match backend DTOs)
-// Example - adjust based on your actual StreamBasicOutput DTO
 export interface StreamBasic {
     id: string;
     name: string;
     streamCode: string;
     ownerId: string;
+    isArchived: boolean;
 }
 
-// Example - adjust based on your actual StreamDetailedOutput DTO
 export interface StreamDetailed extends StreamBasic {
      owner: { id: string; name: string | null; email: string; };
      members: Array<{
@@ -19,10 +17,9 @@ export interface StreamDetailed extends StreamBasic {
          joinedAt: Date; // Or string if not parsed
          user: { id: string; name: string | null; email: string; };
      }>;
-     streamStartDate: string | null; // Add this field (ISO string)
+     streamStartDate: string | null;
 }
 
-// Define input types
 interface CreateStreamInput {
     name: string;
 }
@@ -31,7 +28,6 @@ interface JoinStreamInput {
     streamCode: string;
 }
 
-// Define API response structures (match your backend)
 interface StreamListResponse {
     status: string;
     results: number;
@@ -51,12 +47,12 @@ interface StreamDetailResponse {
 }
 
 
-// --- DEFINE AND EXPORT the service object ---
 export const streamService = {
-    // Function to get streams for the logged-in user
-    getMyStreams: async (): Promise<StreamBasic[]> => {
+    getMyStreams: async (includeArchived: boolean = false): Promise<StreamBasic[]> => {
         try {
-            const response = await apiClient.get<StreamListResponse>('/streams');
+            const response = await apiClient.get<StreamListResponse>('/streams', {
+                params: { includeArchived } // Ensure this is being sent
+            });
             return response.data.data.streams;
         } catch (error: any) {
             console.error("Error fetching streams:", error);
@@ -64,7 +60,27 @@ export const streamService = {
         }
     },
 
-    // Function to get details for a specific stream
+    leaveStream: async (streamId: string): Promise<{ message: string }> => {
+        try {
+            const response = await apiClient.post<{ status: string, data: { message: string } }>(`/streams/${streamId}/leave`);
+            return response.data.data;
+        } catch (error: any) { throw new Error(error.message || 'Failed to leave stream'); }
+    },
+
+    archiveStream: async (streamId: string): Promise<StreamBasic> => {
+        try {
+            const response = await apiClient.post<{ status: string, data: { stream: StreamBasic } }>(`/streams/${streamId}/archive`);
+            return response.data.data.stream;
+        } catch (error: any) { throw new Error(error.message || 'Failed to archive stream'); }
+    },
+
+    unarchiveStream: async (streamId: string): Promise<StreamBasic> => {
+        try {
+            const response = await apiClient.post<{ status: string, data: { stream: StreamBasic } }>(`/streams/${streamId}/unarchive`);
+            return response.data.data.stream;
+        } catch (error: any) { throw new Error(error.message || 'Failed to unarchive stream'); }
+    },
+
     getStreamDetails: async (streamId: string): Promise<StreamDetailed> => {
          try {
             const response = await apiClient.get<StreamDetailResponse>(`/streams/${streamId}`);
@@ -75,7 +91,6 @@ export const streamService = {
         }
     },
 
-    // Function to create a new stream
     createStream: async (data: CreateStreamInput): Promise<StreamBasic> => {
          try {
             const response = await apiClient.post<StreamCreateResponse>('/streams', data);
@@ -86,7 +101,6 @@ export const streamService = {
         }
     },
 
-     // Function to join an existing stream
     joinStream: async (data: JoinStreamInput): Promise<StreamBasic> => {
          try {
             const response = await apiClient.post<StreamJoinResponse>('/streams/join', data);
@@ -97,7 +111,4 @@ export const streamService = {
         }
     },
 
-    // Add other stream-related API functions here (update, manage members, etc.)
 };
-
-// Ensure there are no other 'export default' statements if you use named exports
