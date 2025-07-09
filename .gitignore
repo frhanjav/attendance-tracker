@@ -1,10 +1,18 @@
-secrets.yaml 
-# Template, DO NOT COMMIT real secrets
-# Editor directories and files
 .vscode/*
 !.vscode/settings.json
 !.vscode/extensions.json
 !.vscode/launch.json
+
+secrets.yaml
+
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+.terraform/
+.terraform.lock.hcl
+terraform.tfplan
+terraform.tfplan.json
 
 .idea/
 *.iml
@@ -17,6 +25,9 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+
+*.env
+*.env.*
 
 *.log
 npm-debug.log*
