@@ -48,7 +48,7 @@ jobs:
               - 'terraform/**'
             docker-compose:
               - 'docker-compose*.yml'
-              - 'nginx.reverse-proxy.conf'
+              - 'nginx.reverse-proxy.*.conf'
       
       - name: Check if deployment should happen
         id: deploy-check
@@ -244,6 +244,34 @@ jobs:
       
       - name: Configure Docker for GCP
         run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev
+      
+      - name: Prepare nginx configuration
+        run: |
+          # Use environment-specific nginx configuration
+          if [[ "${{ env.ENVIRONMENT }}" == "production" ]]; then
+            NGINX_TEMPLATE="nginx.reverse-proxy.production.conf"
+            DOMAIN="${{ vars.PRODUCTION_DOMAIN || 'your-domain.com' }}"
+            SERVER_PORT="${{ vars.PRODUCTION_PORT || '80' }}"
+            BACKEND_PORT="3000"
+          else
+            NGINX_TEMPLATE="nginx.reverse-proxy.staging.conf"
+            DOMAIN="${{ vars.STAGING_DOMAIN || 'localhost' }}"
+            SERVER_PORT="${{ vars.STAGING_PORT || '80' }}"
+            BACKEND_PORT="3000"
+          fi
+          
+          echo "🔧 Using template: $NGINX_TEMPLATE"
+          echo "🌐 Domain: $DOMAIN"
+          echo "🔌 Port: $SERVER_PORT"
+          
+          # Create nginx config from template with variable substitution
+          sed -e "s/{{DOMAIN}}/$DOMAIN/g" \
+              -e "s/{{SERVER_PORT}}/$SERVER_PORT/g" \
+              -e "s/{{BACKEND_PORT}}/$BACKEND_PORT/g" \
+              $NGINX_TEMPLATE > nginx.reverse-proxy.conf
+              
+          echo "✅ Generated nginx.reverse-proxy.conf"
+          cat nginx.reverse-proxy.conf
       
       - name: Update Docker Compose with new image tags
         run: |
