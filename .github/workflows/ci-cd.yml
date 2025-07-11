@@ -251,19 +251,44 @@ jobs:
           # Create SSH directory and add private key
           mkdir -p ~/.ssh
           
-          # Use environment-specific SSH key
+          # Debug: Show environment
+          echo "🔍 Environment: ${{ env.ENVIRONMENT }}"
+          
+          # Use environment-specific SSH key and server host
           if [[ "${{ env.ENVIRONMENT }}" == "production" ]]; then
-            echo "${{ secrets.PRODUCTION_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
             SERVER_HOST="${{ secrets.PRODUCTION_SERVER_HOST }}"
+            SSH_PRIVATE_KEY="${{ secrets.PRODUCTION_SSH_PRIVATE_KEY }}"
+            echo "🔍 Using production server configuration"
           else
-            echo "${{ secrets.STAGING_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
             SERVER_HOST="${{ secrets.STAGING_SERVER_HOST }}"
+            SSH_PRIVATE_KEY="${{ secrets.STAGING_SSH_PRIVATE_KEY }}"
+            echo "🔍 Using staging server configuration"
           fi
           
+          # Debug: Show what SERVER_HOST we're using (mask for security)
+          echo "🔍 SERVER_HOST: ${SERVER_HOST:0:3}***${SERVER_HOST: -3}"
+          
+          # Check if SERVER_HOST is set
+          if [[ -z "$SERVER_HOST" ]]; then
+            echo "❌ SERVER_HOST is empty! Check your secrets configuration."
+            echo "Required secrets for ${{ env.ENVIRONMENT }}:"
+            if [[ "${{ env.ENVIRONMENT }}" == "production" ]]; then
+              echo "  - PRODUCTION_SERVER_HOST"
+              echo "  - PRODUCTION_SSH_PRIVATE_KEY"
+            else
+              echo "  - STAGING_SERVER_HOST"
+              echo "  - STAGING_SSH_PRIVATE_KEY"
+            fi
+            exit 1
+          fi
+          
+          # Set up SSH key
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           
           # Add server to known_hosts to avoid SSH verification prompt
-          ssh-keyscan -H $SERVER_HOST >> ~/.ssh/known_hosts
+          ssh-keyscan -H "$SERVER_HOST" >> ~/.ssh/known_hosts
+          echo "✅ Added $SERVER_HOST to known_hosts"
       
       - name: Deploy to Server
         run: |
