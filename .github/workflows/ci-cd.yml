@@ -189,10 +189,6 @@ jobs:
     env:
       ENVIRONMENT: ${{ needs.detect-changes.outputs.environment }}
     
-    defaults:
-      run:
-        working-directory: ./terraform/environments/${{ needs.detect-changes.outputs.environment }}
-    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -207,11 +203,23 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
       
+      - name: Debug - Check environment and paths
+        run: |
+          echo "🔍 Debug Information:"
+          echo "Environment: ${{ needs.detect-changes.outputs.environment }}"
+          echo "Working Directory: $(pwd)"
+          echo "Target Directory: ./terraform/environments/${{ needs.detect-changes.outputs.environment }}"
+          ls -la ./terraform/environments/${{ needs.detect-changes.outputs.environment }}/ || echo "Directory not found"
+          echo "Backend config file:"
+          cat ./terraform/environments/${{ needs.detect-changes.outputs.environment }}/backend.tfvars || echo "File not found"
+      
       - name: Terraform Init
         run: terraform init -backend-config=backend.tfvars
+        working-directory: ./terraform/environments/${{ needs.detect-changes.outputs.environment }}
       
       - name: Terraform Plan
         run: terraform plan -var-file=terraform.tfvars -var="aiven_database_url=${{ secrets.AIVEN_DATABASE_URL }}" -out=tfplan
+        working-directory: ./terraform/environments/${{ needs.detect-changes.outputs.environment }}
         env:
           TF_VAR_gcp_project_id: ${{ env.GCP_PROJECT_ID }}
           TF_VAR_backend_image: ${{ env.BACKEND_IMAGE }}
@@ -220,6 +228,7 @@ jobs:
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
         run: terraform apply -auto-approve tfplan
+        working-directory: ./terraform/environments/${{ needs.detect-changes.outputs.environment }}
 
   # Deploy with Docker Compose
   deploy-application:
@@ -314,7 +323,7 @@ jobs:
           if [[ "${{ env.ENVIRONMENT }}" == "production" ]]; then
             SERVER_HOST="${{ secrets.PRODUCTION_SERVER_HOST }}"
             SERVER_USER="${{ secrets.PRODUCTION_SERVER_USER }}"
-            COMPOSE_FILE="docker-compose.production.yml"
+            COMPOSE_FILE="docker-compose.prod.yml"
           else
             SERVER_HOST="${{ secrets.STAGING_SERVER_HOST }}"
             SERVER_USER="${{ secrets.STAGING_SERVER_USER }}"
