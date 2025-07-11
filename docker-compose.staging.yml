@@ -1,6 +1,6 @@
 services:
   backend:
-    image: asia-south1-docker.pkg.dev/pivotal-gearbox-451115-q1/attendance-repo-multiarch/attendance-backend:latest
+    image: us-central1-docker.pkg.dev/pivotal-gearbox-451115-q1/attendance-repo-multiarch/attendance-backend:latest
     platform: linux/amd64
     container_name: attendance_backend_staging
     restart: always
@@ -23,7 +23,7 @@ services:
       start_period: 30s
 
   frontend:
-    image: asia-south1-docker.pkg.dev/pivotal-gearbox-451115-q1/attendance-repo-multiarch/attendance-frontend:latest
+    image: us-central1-docker.pkg.dev/pivotal-gearbox-451115-q1/attendance-repo-multiarch/attendance-frontend:latest
     container_name: attendance_frontend_staging
     restart: always
     networks:
