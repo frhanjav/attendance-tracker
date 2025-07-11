@@ -10,7 +10,10 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:generate": "prisma generate",
     "prisma:seed": "ts-node prisma/seed.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "echo \"Linting not configured yet\"",
+    "test:ci": "echo \"Tests not configured yet\"",
+    "prisma:backup": "pg_dump $DATABASE_URL > backup.sql"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

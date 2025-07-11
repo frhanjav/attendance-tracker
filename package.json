@@ -4,7 +4,20 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,css,md}\""
+    "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,css,md}\"",
+    "build:all": "npm run build:backend && npm run build:frontend",
+    "build:backend": "cd backend && npm run build",
+    "build:frontend": "cd frontend && npm run build",
+    "deploy:dev": "ENVIRONMENT=development ./scripts/smart-build.sh",
+    "deploy:staging": "ENVIRONMENT=staging DEPLOY_WITH_COMPOSE=true ./scripts/smart-build.sh",
+    "deploy:prod": "./scripts/deploy-production.sh",
+    "setup:cicd": "./scripts/setup-cicd.sh",
+    "docker:dev": "docker-compose -f docker-compose.development.yml up -d",
+    "docker:staging": "docker-compose -f docker-compose.staging.yml up -d",
+    "docker:prod": "docker-compose -f docker-compose.prod.yml up -d",
+    "docker:down": "docker-compose down",
+    "logs": "docker-compose logs -f",
+    "status": "docker-compose ps"
   },
   "keywords": [],
   "author": "",
