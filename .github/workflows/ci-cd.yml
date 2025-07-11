@@ -180,59 +180,9 @@ jobs:
           
           echo "FRONTEND_IMAGE=$IMAGE_TAG" >> $GITHUB_ENV
 
-  # Deploy Infrastructure
-  deploy-infrastructure:
-    needs: [detect-changes, build-and-push]
-    if: always() && needs.detect-changes.outputs.should-deploy == 'true' && (needs.detect-changes.outputs.terraform-changed == 'true' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
-    runs-on: ubuntu-latest
-    
-    env:
-      ENVIRONMENT: ${{ needs.detect-changes.outputs.environment }}
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.6.0
-      
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-      
-      - name: Debug - Check environment and paths
-        run: |
-          echo "🔍 Debug Information:"
-          echo "Environment: ${{ needs.detect-changes.outputs.environment }}"
-          echo "Working Directory: $(pwd)"
-          echo "Target Directory: ./terraform/environments/${{ needs.detect-changes.outputs.environment }}"
-          ls -la ./terraform/environments/${{ needs.detect-changes.outputs.environment }}/ || echo "Directory not found"
-          echo "Backend config file:"
-          cat ./terraform/environments/${{ needs.detect-changes.outputs.environment }}/backend.tfvars || echo "File not found"
-      
-      - name: Terraform Init
-        run: terraform init -backend-config=backend.tfvars
-        working-directory: ./terraform/environments/${{ needs.detect-changes.outputs.environment }}
-      
-      - name: Terraform Plan
-        run: terraform plan -var-file=terraform.tfvars -var="aiven_database_url=${{ secrets.AIVEN_DATABASE_URL }}" -out=tfplan
-        working-directory: ./terraform/environments/${{ needs.detect-changes.outputs.environment }}
-        env:
-          TF_VAR_gcp_project_id: ${{ env.GCP_PROJECT_ID }}
-          TF_VAR_backend_image: ${{ env.BACKEND_IMAGE }}
-          TF_VAR_frontend_image: ${{ env.FRONTEND_IMAGE }}
-      
-      - name: Terraform Apply
-        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
-        run: terraform apply -auto-approve tfplan
-        working-directory: ./terraform/environments/${{ needs.detect-changes.outputs.environment }}
-
-  # Deploy with Docker Compose
+  # Deploy with Docker Compose (skipping Terraform - manage infrastructure manually)
   deploy-application:
-    needs: [detect-changes, build-and-push, deploy-infrastructure]
+    needs: [detect-changes, build-and-push]
     if: always() && needs.detect-changes.outputs.should-deploy == 'true' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
     runs-on: ubuntu-latest
     
