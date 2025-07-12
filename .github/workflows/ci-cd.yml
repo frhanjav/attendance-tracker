@@ -399,32 +399,25 @@ jobs:
                   echo 'Database URL retrieved from GCP Secret Manager'
 
                   echo '🔍 Creating environment file...'
-                  cat > .env << EOF
-AIVEN_DATABASE_URL=\$AIVEN_DATABASE_URL
-JWT_SECRET=${{ secrets.JWT_SECRET || 'staging-jwt-secret-changeme' }}
-NODE_ENV=${{ env.ENVIRONMENT }}
-EOF
+                  echo \"AIVEN_DATABASE_URL=\$AIVEN_DATABASE_URL\" > .env
+                  echo \"JWT_SECRET=${{ secrets.JWT_SECRET || 'staging-jwt-secret-changeme' }}\" >> .env
+                  echo \"NODE_ENV=${{ env.ENVIRONMENT }}\" >> .env
                   echo 'Environment file created'
 
                   echo '📦 Pulling latest Docker images...'
                   # Use newgrp to apply docker group membership in current session
-                  newgrp docker << 'DOCKERCMDS'
-                  docker-compose -f $COMPOSE_FILE pull
-                  
-                  echo '🔄 Deploying with zero-downtime restart...'
-                  docker-compose -f $COMPOSE_FILE up -d
-
-                  echo '🧹 Cleaning up old Docker images...'
-                  docker image prune -f
-
-                  echo '✅ Deployment completed successfully!'
-
-                  echo '📊 Service status:'
-                  docker-compose -f $COMPOSE_FILE ps
-                  
-                  echo '🔍 Container logs (last 10 lines):'
-                  docker-compose -f $COMPOSE_FILE logs --tail=10
-                  DOCKERCMDS
+                  newgrp docker -c \"
+                    docker-compose -f $COMPOSE_FILE pull && \\
+                    echo '🔄 Deploying with zero-downtime restart...' && \\
+                    docker-compose -f $COMPOSE_FILE up -d && \\
+                    echo '🧹 Cleaning up old Docker images...' && \\
+                    docker image prune -f && \\
+                    echo '✅ Deployment completed successfully!' && \\
+                    echo '📊 Service status:' && \\
+                    docker-compose -f $COMPOSE_FILE ps && \\
+                    echo '🔍 Container logs (last 10 lines):' && \\
+                    docker-compose -f $COMPOSE_FILE logs --tail=10
+                  \"
                   "
 
                   echo "✅ Deployment to ${{ env.ENVIRONMENT }} server completed!"
