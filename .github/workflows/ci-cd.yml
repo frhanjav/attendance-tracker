@@ -350,49 +350,82 @@ jobs:
                   echo "🔍 SERVER_HOST: ${SERVER_HOST}"
                   echo "🔍 SERVER_USER: ${SERVER_USER}"
 
-                  # Define compose file based on environment
+                  # Define compose file and secret names based on environment
                   if [[ "${{ env.ENVIRONMENT }}" == "production" ]]; then
                     COMPOSE_FILE="docker-compose.prod.yml"
+                    DB_SECRET_NAME="aiven-db-connection-production"
                   else
                     COMPOSE_FILE="docker-compose.staging.yml"
+                    DB_SECRET_NAME="aiven-db-connection-staging"
                   fi
 
                   PROJECT_DIR="/home/${SERVER_USER}/attendance-tracker"
 
                   echo "📡 Connecting to ${SERVER_USER}@${SERVER_HOST}..."
 
-                  # Copy updated docker-compose file to server with verbose SSH
-                  echo "🔍 Attempting SCP transfer..."
-                  scp -i ~/.ssh/id_rsa -v $COMPOSE_FILE nginx.reverse-proxy.conf ${SERVER_USER}@${SERVER_HOST}:${PROJECT_DIR}/ || {
-                    echo "❌ SCP failed. Trying with different SSH options..."
-                    scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $COMPOSE_FILE nginx.reverse-proxy.conf ${SERVER_USER}@${SERVER_HOST}:${PROJECT_DIR}/
-                  }
+                  # First, ensure the project directory exists and set up the environment
+                  echo "🔍 Setting up project directory..."
+                  ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_HOST} "
+                  # Create project directory if it doesn't exist
+                  mkdir -p ${PROJECT_DIR}
+                  
+                  # Add user to docker group if not already (needed for Docker access)
+                  if ! groups \$USER | grep -q docker; then
+                    echo '🔧 Adding user to docker group...'
+                    sudo usermod -aG docker \$USER
+                    echo '⚠️  User added to docker group. Note: Group changes take effect on next login.'
+                  fi
+                  
+                  echo '✅ Project directory set up'
+                  "
+
+                  # Copy updated docker-compose file to server
+                  echo "🔍 Copying deployment files..."
+                  scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no $COMPOSE_FILE nginx.reverse-proxy.conf ${SERVER_USER}@${SERVER_HOST}:${PROJECT_DIR}/
 
                   # Execute deployment commands on the server
-                  echo "🔍 Attempting SSH connection for deployment..."
-                  ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_HOST} '
+                  echo "🔍 Executing deployment..."
+                  ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_HOST} "
                   set -e
 
-                  echo "📁 Navigating to project directory..."
-                  cd /home/'${SERVER_USER}'/attendance-tracker
+                  echo '📁 Navigating to project directory...'
+                  cd ${PROJECT_DIR}
 
-                  echo "🔐 Authenticating with Google Cloud..."
-                  gcloud auth configure-docker '${GCP_REGION}'-docker.pkg.dev
+                  echo '🔐 Authenticating with Google Cloud (non-interactive)...'
+                  gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
 
-                  echo "📦 Pulling latest Docker images..."
-                  docker-compose -f '${COMPOSE_FILE}' pull
+                  echo '🔍 Fetching database URL from GCP Secret Manager...'
+                  AIVEN_DATABASE_URL=\$(gcloud secrets versions access latest --secret=\"$DB_SECRET_NAME\" --project=\"${{ env.GCP_PROJECT_ID }}\")
+                  echo 'Database URL retrieved from GCP Secret Manager'
 
-                  echo "🔄 Deploying with zero-downtime restart..."
-                  docker-compose -f '${COMPOSE_FILE}' up -d
+                  echo '🔍 Creating environment file...'
+                  cat > .env << EOF
+AIVEN_DATABASE_URL=\$AIVEN_DATABASE_URL
+JWT_SECRET=${{ secrets.JWT_SECRET || 'staging-jwt-secret-changeme' }}
+NODE_ENV=${{ env.ENVIRONMENT }}
+EOF
+                  echo 'Environment file created'
 
-                  echo "🧹 Cleaning up old Docker images..."
+                  echo '📦 Pulling latest Docker images...'
+                  # Use newgrp to apply docker group membership in current session
+                  newgrp docker << 'DOCKERCMDS'
+                  docker-compose -f $COMPOSE_FILE pull
+                  
+                  echo '🔄 Deploying with zero-downtime restart...'
+                  docker-compose -f $COMPOSE_FILE up -d
+
+                  echo '🧹 Cleaning up old Docker images...'
                   docker image prune -f
 
-                  echo "✅ Deployment completed successfully!"
+                  echo '✅ Deployment completed successfully!'
 
-                  echo "📊 Service status:"
-                  docker-compose -f '${COMPOSE_FILE}' ps
-                  '
+                  echo '📊 Service status:'
+                  docker-compose -f $COMPOSE_FILE ps
+                  
+                  echo '🔍 Container logs (last 10 lines):'
+                  docker-compose -f $COMPOSE_FILE logs --tail=10
+                  DOCKERCMDS
+                  "
 
                   echo "✅ Deployment to ${{ env.ENVIRONMENT }} server completed!"
 
