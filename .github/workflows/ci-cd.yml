@@ -322,9 +322,21 @@ jobs:
                   echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
                   chmod 600 ~/.ssh/id_rsa
 
+                  # Debug: Check SSH key format
+                  echo "🔍 SSH key first line:"
+                  head -n 1 ~/.ssh/id_rsa
+                  echo "🔍 SSH key last line:"
+                  tail -n 1 ~/.ssh/id_rsa
+                  echo "🔍 SSH key file permissions:"
+                  ls -la ~/.ssh/id_rsa
+
                   # Add server to known_hosts to avoid SSH verification prompt
                   ssh-keyscan -H "$SERVER_HOST" >> ~/.ssh/known_hosts
                   echo "✅ Added $SERVER_HOST to known_hosts"
+
+                  # Debug: Test SSH connection
+                  echo "🔍 Testing SSH connection..."
+                  ssh -i ~/.ssh/id_rsa -o ConnectTimeout=10 -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_HOST} "echo 'SSH connection successful'" || echo "❌ SSH connection failed"
 
                   # Export variables for next step
                   echo "SERVER_HOST=$SERVER_HOST" >> $GITHUB_ENV
@@ -349,33 +361,38 @@ jobs:
 
                   echo "📡 Connecting to ${SERVER_USER}@${SERVER_HOST}..."
 
-                  # Copy updated docker-compose file to server
-                  scp -i ~/.ssh/id_rsa $COMPOSE_FILE nginx.reverse-proxy.conf ${SERVER_USER}@${SERVER_HOST}:${PROJECT_DIR}/
+                  # Copy updated docker-compose file to server with verbose SSH
+                  echo "🔍 Attempting SCP transfer..."
+                  scp -i ~/.ssh/id_rsa -v $COMPOSE_FILE nginx.reverse-proxy.conf ${SERVER_USER}@${SERVER_HOST}:${PROJECT_DIR}/ || {
+                    echo "❌ SCP failed. Trying with different SSH options..."
+                    scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $COMPOSE_FILE nginx.reverse-proxy.conf ${SERVER_USER}@${SERVER_HOST}:${PROJECT_DIR}/
+                  }
 
                   # Execute deployment commands on the server
-                  ssh -i ~/.ssh/id_rsa ${SERVER_USER}@${SERVER_HOST} << EOF
-                    set -e
-                    
-                    echo "📁 Navigating to project directory..."
-                    cd ${PROJECT_DIR}
-                    
-                    echo "🔐 Authenticating with Google Cloud..."
-                    gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev
-                    
-                    echo "📦 Pulling latest Docker images..."
-                    docker-compose -f $COMPOSE_FILE pull
-                    
-                    echo "🔄 Deploying with zero-downtime restart..."
-                    docker-compose -f $COMPOSE_FILE up -d
-                    
-                    echo "🧹 Cleaning up old Docker images..."
-                    docker image prune -f
-                    
-                    echo "✅ Deployment completed successfully!"
-                    
-                    echo "📊 Service status:"
-                    docker-compose -f $COMPOSE_FILE ps
-                  EOF
+                  echo "🔍 Attempting SSH connection for deployment..."
+                  ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_HOST} '
+                  set -e
+
+                  echo "📁 Navigating to project directory..."
+                  cd /home/'${SERVER_USER}'/attendance-tracker
+
+                  echo "🔐 Authenticating with Google Cloud..."
+                  gcloud auth configure-docker '${GCP_REGION}'-docker.pkg.dev
+
+                  echo "📦 Pulling latest Docker images..."
+                  docker-compose -f '${COMPOSE_FILE}' pull
+
+                  echo "🔄 Deploying with zero-downtime restart..."
+                  docker-compose -f '${COMPOSE_FILE}' up -d
+
+                  echo "🧹 Cleaning up old Docker images..."
+                  docker image prune -f
+
+                  echo "✅ Deployment completed successfully!"
+
+                  echo "📊 Service status:"
+                  docker-compose -f '${COMPOSE_FILE}' ps
+                  '
 
                   echo "✅ Deployment to ${{ env.ENVIRONMENT }} server completed!"
 
