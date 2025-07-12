@@ -290,11 +290,6 @@ const LandingPage: React.FC = () => {
                                             Privacy
                                         </a>
                                     </li>
-                                    <li>
-                                        <a href="#" className="text-gray-400 hover:text-white">
-                                            Terms
-                                        </a>
-                                    </li>
                                 </ul>
                             </div>
                         </div>
