@@ -31,7 +31,7 @@ const getJwtExpiresInSeconds = (): number => {
 
 export const config = {
     port: process.env.PORT || 3001,
-    databaseUrl: process.env.DATABASE_URL || '',
+    databaseUrl: process.env.AIVEN_DATABASE_URL || process.env.DATABASE_URL || '',
     nodeEnv: process.env.NODE_ENV || 'development',
     frontendUrl: process.env.FRONTEND_URL || 'http://localhost:8080',
 
@@ -45,7 +45,7 @@ export const config = {
     // Google OAuth
     googleClientId: process.env.GOOGLE_CLIENT_ID || '',
     googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
-    googleCallbackUrl: process.env.GOOGLE_CALLBACK_URL || '',
+    googleCallbackUrl: process.env.GOOGLE_CALLBACK_URL || `${process.env.FRONTEND_URL || 'http://localhost:8080'}/auth/google/callback`,
 
     // Session
     sessionSecret: process.env.SESSION_SECRET || 'fallback_session_secret_!!change_me!!',

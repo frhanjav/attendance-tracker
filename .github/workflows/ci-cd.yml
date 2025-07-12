@@ -21,6 +21,10 @@ env:
 
     # Application Configuration
     PROJECT_NAME: attendance-tracker
+    
+    # Domain Configuration
+    STAGING_DOMAIN: ${{ vars.STAGING_DOMAIN || 'staging.timetable.leverage.blog' }}
+    PRODUCTION_DOMAIN: ${{ vars.PRODUCTION_DOMAIN || 'timetable.leverage.blog' }}
 
 jobs:
     # Detect what changed in the PR/push
@@ -235,13 +239,13 @@ jobs:
                   # Use environment-specific nginx configuration
                   if [[ "${{ env.ENVIRONMENT }}" == "production" ]]; then
                     NGINX_TEMPLATE="nginx.reverse-proxy.production.conf"
-                    DOMAIN="${{ vars.PRODUCTION_DOMAIN || 'your-domain.com' }}"
-                    SERVER_PORT="${{ vars.PRODUCTION_PORT || '80' }}"
+                    DOMAIN="${{ env.PRODUCTION_DOMAIN }}"
+                    SERVER_PORT="80"
                     BACKEND_PORT="3000"
                   else
-                    NGINX_TEMPLATE="nginx.reverse-proxy.staging.conf"
-                    DOMAIN="${{ vars.STAGING_DOMAIN || 'localhost' }}"
-                    SERVER_PORT="${{ vars.STAGING_PORT || '80' }}"
+                    NGINX_TEMPLATE="nginx.reverse-proxy.staging-ssl.conf"
+                    DOMAIN="${{ env.STAGING_DOMAIN }}"
+                    SERVER_PORT="80"
                     BACKEND_PORT="3000"
                   fi
 
@@ -280,29 +284,25 @@ jobs:
                   # Debug: Show environment
                   echo "🔍 Environment: ${{ env.ENVIRONMENT }}"
 
-                  # Debug: Show which secrets we're trying to access
-                  if [[ "${{ env.ENVIRONMENT }}" == "production" ]]; then
-                    echo "🔍 Looking for secrets: PRODUCTION_SERVER_HOST, PRODUCTION_SSH_PRIVATE_KEY, PRODUCTION_SERVER_USER"
-                  else
-                    echo "🔍 Looking for secrets: STAGING_SERVER_HOST, STAGING_SSH_PRIVATE_KEY, STAGING_SERVER_USER"
-                  fi
-
-                  # Use environment-specific SSH key and server host
+                  # Use environment-specific SSH key, server host, and server user
                   if [[ "${{ env.ENVIRONMENT }}" == "production" ]]; then
                     SERVER_HOST="${{ secrets.PRODUCTION_SERVER_HOST }}"
                     SSH_PRIVATE_KEY="${{ secrets.PRODUCTION_SSH_PRIVATE_KEY }}"
                     SERVER_USER="${{ secrets.PRODUCTION_SERVER_USER }}"
+                    DOMAIN="${{ env.PRODUCTION_DOMAIN }}"
                     echo "🔍 Using production server configuration"
                   else
                     SERVER_HOST="${{ secrets.STAGING_SERVER_HOST }}"
                     SSH_PRIVATE_KEY="${{ secrets.STAGING_SSH_PRIVATE_KEY }}"
                     SERVER_USER="${{ secrets.STAGING_SERVER_USER }}"
+                    DOMAIN="${{ env.STAGING_DOMAIN }}"
                     echo "🔍 Using staging server configuration"
                   fi
 
                   # Debug: Show what SERVER_HOST we're using (mask for security)
                   echo "🔍 SERVER_HOST: ${SERVER_HOST:0:3}***${SERVER_HOST: -3}"
                   echo "🔍 SERVER_USER: ${SERVER_USER:0:2}***${SERVER_USER: -2}"
+                  echo "🔍 DOMAIN: $DOMAIN"
 
                   # Check if SERVER_HOST is set
                   if [[ -z "$SERVER_HOST" ]]; then
@@ -367,6 +367,7 @@ jobs:
                   # Export variables for next step
                   echo "SERVER_HOST=$SERVER_HOST" >> $GITHUB_ENV
                   echo "SERVER_USER=$SERVER_USER" >> $GITHUB_ENV
+                  echo "DOMAIN=$DOMAIN" >> $GITHUB_ENV
 
             - name: Deploy to Server
               run: |
@@ -380,9 +381,13 @@ jobs:
                   if [[ "${{ env.ENVIRONMENT }}" == "production" ]]; then
                     COMPOSE_FILE="docker-compose.prod.yml"
                     DATABASE_URL="${{ secrets.PRODUCTION_DATABASE_URL }}"
+                    OAUTH_CLIENT_ID="${{ secrets.GOOGLE_CLIENT_ID }}"
+                    OAUTH_CLIENT_SECRET="${{ secrets.GOOGLE_CLIENT_SECRET }}"
                   else
                     COMPOSE_FILE="docker-compose.staging.yml"
                     DATABASE_URL="${{ secrets.STAGING_DATABASE_URL }}"
+                    OAUTH_CLIENT_ID="${{ secrets.GOOGLE_CLIENT_ID }}"
+                    OAUTH_CLIENT_SECRET="${{ secrets.GOOGLE_CLIENT_SECRET }}"
                   fi
 
                   PROJECT_DIR="/home/${SERVER_USER}/attendance-tracker"
@@ -421,6 +426,10 @@ jobs:
                   echo \"AIVEN_DATABASE_URL=$DATABASE_URL\" > .env
                   echo \"JWT_SECRET=${{ secrets.JWT_SECRET || 'staging-jwt-secret-changeme' }}\" >> .env
                   echo \"NODE_ENV=${{ env.ENVIRONMENT }}\" >> .env
+                  echo \"GOOGLE_CLIENT_ID=$OAUTH_CLIENT_ID\" >> .env
+                  echo \"GOOGLE_CLIENT_SECRET=$OAUTH_CLIENT_SECRET\" >> .env
+                  echo \"FRONTEND_URL=https://$DOMAIN\" >> .env
+                  echo \"GOOGLE_CALLBACK_URL=https://$DOMAIN/auth/google/callback\" >> .env
                   echo 'Environment file created'
 
                   echo '📦 Pulling latest Docker images...'
