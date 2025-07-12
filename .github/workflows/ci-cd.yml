@@ -6,6 +6,12 @@ on:
     pull_request:
         branches: [main]
 
+# Add permissions for security scanning
+permissions:
+    contents: read
+    security-events: write
+    actions: read
+
 env:
     # GCP Configuration
     GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
@@ -119,6 +125,10 @@ jobs:
         needs: detect-changes
         if: needs.detect-changes.outputs.backend-changed == 'true' || needs.detect-changes.outputs.frontend-changed == 'true'
         runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            security-events: write
+            actions: read
 
         steps:
             - name: Checkout code
@@ -134,9 +144,25 @@ jobs:
 
             - name: Upload Trivy scan results to GitHub Security tab
               uses: github/codeql-action/upload-sarif@v3
-              if: always()
+              if: always() && github.event_name != 'pull_request'
               with:
                   sarif_file: 'trivy-results.sarif'
+              continue-on-error: true
+
+            - name: Show scan summary
+              if: always()
+              run: |
+                  echo "🔍 Security scan completed"
+                  if [ -f "trivy-results.sarif" ]; then
+                    echo "✅ SARIF report generated successfully"
+                    # Show a summary of findings if any
+                    if command -v jq &> /dev/null; then
+                      ISSUES=$(jq '.runs[0].results | length' trivy-results.sarif 2>/dev/null || echo "0")
+                      echo "📊 Found $ISSUES security issues"
+                    fi
+                  else
+                    echo "❌ SARIF report not found"
+                  fi
 
     # Build and Push Docker Images
     build-and-push:
