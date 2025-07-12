@@ -350,13 +350,13 @@ jobs:
                   echo "🔍 SERVER_HOST: ${SERVER_HOST}"
                   echo "🔍 SERVER_USER: ${SERVER_USER}"
 
-                  # Define compose file and secret names based on environment
+                  # Define compose file and database URL based on environment
                   if [[ "${{ env.ENVIRONMENT }}" == "production" ]]; then
                     COMPOSE_FILE="docker-compose.prod.yml"
-                    DB_SECRET_NAME="aiven-db-connection-production"
+                    DATABASE_URL="${{ secrets.PRODUCTION_DATABASE_URL }}"
                   else
                     COMPOSE_FILE="docker-compose.staging.yml"
-                    DB_SECRET_NAME="aiven-db-connection-staging"
+                    DATABASE_URL="${{ secrets.STAGING_DATABASE_URL }}"
                   fi
 
                   PROJECT_DIR="/home/${SERVER_USER}/attendance-tracker"
@@ -368,14 +368,14 @@ jobs:
                   ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_HOST} "
                   # Create project directory if it doesn't exist
                   mkdir -p ${PROJECT_DIR}
-                  
+
                   # Add user to docker group if not already (needed for Docker access)
                   if ! groups \$USER | grep -q docker; then
                     echo '🔧 Adding user to docker group...'
                     sudo usermod -aG docker \$USER
                     echo '⚠️  User added to docker group. Note: Group changes take effect on next login.'
                   fi
-                  
+
                   echo '✅ Project directory set up'
                   "
 
@@ -391,15 +391,8 @@ jobs:
                   echo '📁 Navigating to project directory...'
                   cd ${PROJECT_DIR}
 
-                  echo '🔐 Authenticating with Google Cloud (non-interactive)...'
-                  gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
-
-                  echo '🔍 Fetching database URL from GCP Secret Manager...'
-                  AIVEN_DATABASE_URL=\$(gcloud secrets versions access latest --secret=\"$DB_SECRET_NAME\" --project=\"${{ env.GCP_PROJECT_ID }}\")
-                  echo 'Database URL retrieved from GCP Secret Manager'
-
-                  echo '🔍 Creating environment file...'
-                  echo \"AIVEN_DATABASE_URL=\$AIVEN_DATABASE_URL\" > .env
+                  echo ' Creating environment file with database URL from GitHub secrets...'
+                  echo \"AIVEN_DATABASE_URL=$DATABASE_URL\" > .env
                   echo \"JWT_SECRET=${{ secrets.JWT_SECRET || 'staging-jwt-secret-changeme' }}\" >> .env
                   echo \"NODE_ENV=${{ env.ENVIRONMENT }}\" >> .env
                   echo 'Environment file created'
