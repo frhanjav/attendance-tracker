@@ -1,356 +1,396 @@
 name: CI/CD Pipeline
 
 on:
-  push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main ]
+    push:
+        branches: [main, develop]
+    pull_request:
+        branches: [main]
 
 env:
-  # GCP Configuration
-  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-  GCP_REGION: ${{ vars.GCP_REGION }}
-  GCP_ARTIFACT_REGISTRY: ${{ vars.GCP_ARTIFACT_REGISTRY }}
-  REGISTRY_URL: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GCP_ARTIFACT_REGISTRY }}
-  
-  # Application Configuration
-  PROJECT_NAME: attendance-tracker
-  
+    # GCP Configuration
+    GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+    GCP_REGION: ${{ vars.GCP_REGION }}
+    GCP_ARTIFACT_REGISTRY: ${{ vars.GCP_ARTIFACT_REGISTRY }}
+    REGISTRY_URL: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GCP_ARTIFACT_REGISTRY }}
+
+    # Application Configuration
+    PROJECT_NAME: attendance-tracker
+
 jobs:
-  # Detect what changed in the PR/push
-  detect-changes:
-    runs-on: ubuntu-latest
-    outputs:
-      backend-changed: ${{ steps.changes.outputs.backend }}
-      frontend-changed: ${{ steps.changes.outputs.frontend }}
-      terraform-changed: ${{ steps.changes.outputs.terraform }}
-      docker-compose-changed: ${{ steps.changes.outputs.docker-compose }}
-      should-deploy: ${{ steps.deploy-check.outputs.should-deploy }}
-      environment: ${{ steps.deploy-check.outputs.environment }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      
-      - name: Detect file changes
-        uses: dorny/paths-filter@v3
-        id: changes
-        with:
-          filters: |
-            backend:
-              - 'backend/**'
-              - 'backend/Dockerfile'
-            frontend:
-              - 'frontend/**'
-              - 'frontend/Dockerfile'
-            terraform:
-              - 'terraform/**'
-            docker-compose:
-              - 'docker-compose*.yml'
-              - 'nginx.reverse-proxy.*.conf'
-      
-      - name: Check if deployment should happen
-        id: deploy-check
-        run: |
-          # Determine deployment environment
-          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-            echo "should-deploy=true" >> $GITHUB_OUTPUT
-            echo "environment=production" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
-            echo "should-deploy=true" >> $GITHUB_OUTPUT
-            echo "environment=staging" >> $GITHUB_OUTPUT
-          elif [[ "${{ steps.changes.outputs.terraform }}" == "true" ]]; then
-            echo "should-deploy=true" >> $GITHUB_OUTPUT
-            echo "environment=staging" >> $GITHUB_OUTPUT
-          else
-            echo "should-deploy=false" >> $GITHUB_OUTPUT
-            echo "environment=none" >> $GITHUB_OUTPUT
-          fi
+    # Detect what changed in the PR/push
+    detect-changes:
+        runs-on: ubuntu-latest
+        outputs:
+            backend-changed: ${{ steps.changes.outputs.backend }}
+            frontend-changed: ${{ steps.changes.outputs.frontend }}
+            terraform-changed: ${{ steps.changes.outputs.terraform }}
+            docker-compose-changed: ${{ steps.changes.outputs.docker-compose }}
+            should-deploy: ${{ steps.deploy-check.outputs.should-deploy }}
+            environment: ${{ steps.deploy-check.outputs.environment }}
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
 
-  # Build Check (No tests yet - placeholder for future)
-  build-check:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.backend-changed == 'true' || needs.detect-changes.outputs.frontend-changed == 'true'
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Setup Node.js for Backend
-        if: needs.detect-changes.outputs.backend-changed == 'true'
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: backend/package-lock.json
-      
-      - name: Install backend dependencies
-        if: needs.detect-changes.outputs.backend-changed == 'true'
-        working-directory: ./backend
-        run: npm ci
-      
-      - name: Build backend
-        if: needs.detect-changes.outputs.backend-changed == 'true'
-        working-directory: ./backend
-        run: npm run build
-      
-      - name: Setup Node.js for Frontend
-        if: needs.detect-changes.outputs.frontend-changed == 'true'
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-      
-      - name: Install frontend dependencies
-        if: needs.detect-changes.outputs.frontend-changed == 'true'
-        working-directory: ./frontend
-        run: npm ci
-      
-      - name: Build frontend
-        if: needs.detect-changes.outputs.frontend-changed == 'true'
-        working-directory: ./frontend
-        run: npm run build
+            - name: Detect file changes
+              uses: dorny/paths-filter@v3
+              id: changes
+              with:
+                  filters: |
+                      backend:
+                        - 'backend/**'
+                        - 'backend/Dockerfile'
+                      frontend:
+                        - 'frontend/**'
+                        - 'frontend/Dockerfile'
+                      terraform:
+                        - 'terraform/**'
+                      docker-compose:
+                        - 'docker-compose*.yml'
+                        - 'nginx.reverse-proxy.*.conf'
 
-  # Security Scan
-  security-scan:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.backend-changed == 'true' || needs.detect-changes.outputs.frontend-changed == 'true'
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: 'fs'
-          scan-ref: '.'
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-      
-      - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
+            - name: Check if deployment should happen
+              id: deploy-check
+              run: |
+                  # Determine deployment environment
+                  if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+                    echo "should-deploy=true" >> $GITHUB_OUTPUT
+                    echo "environment=production" >> $GITHUB_OUTPUT
+                  elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+                    echo "should-deploy=true" >> $GITHUB_OUTPUT
+                    echo "environment=staging" >> $GITHUB_OUTPUT
+                  elif [[ "${{ steps.changes.outputs.terraform }}" == "true" ]]; then
+                    echo "should-deploy=true" >> $GITHUB_OUTPUT
+                    echo "environment=staging" >> $GITHUB_OUTPUT
+                  else
+                    echo "should-deploy=false" >> $GITHUB_OUTPUT
+                    echo "environment=none" >> $GITHUB_OUTPUT
+                  fi
+
+    # Build Check (No tests yet - placeholder for future)
+    build-check:
+        needs: detect-changes
+        if: needs.detect-changes.outputs.backend-changed == 'true' || needs.detect-changes.outputs.frontend-changed == 'true'
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Setup Node.js for Backend
+              if: needs.detect-changes.outputs.backend-changed == 'true'
+              uses: actions/setup-node@v4
+              with:
+                  node-version: '20'
+                  cache: 'npm'
+                  cache-dependency-path: backend/package-lock.json
+
+            - name: Install backend dependencies
+              if: needs.detect-changes.outputs.backend-changed == 'true'
+              working-directory: ./backend
+              run: npm ci
+
+            - name: Build backend
+              if: needs.detect-changes.outputs.backend-changed == 'true'
+              working-directory: ./backend
+              run: npm run build
+
+            - name: Setup Node.js for Frontend
+              if: needs.detect-changes.outputs.frontend-changed == 'true'
+              uses: actions/setup-node@v4
+              with:
+                  node-version: '20'
+                  cache: 'npm'
+                  cache-dependency-path: frontend/package-lock.json
+
+            - name: Install frontend dependencies
+              if: needs.detect-changes.outputs.frontend-changed == 'true'
+              working-directory: ./frontend
+              run: npm ci
+
+            - name: Build frontend
+              if: needs.detect-changes.outputs.frontend-changed == 'true'
+              working-directory: ./frontend
+              run: npm run build
+
+    # Security Scan
+    security-scan:
+        needs: detect-changes
+        if: needs.detect-changes.outputs.backend-changed == 'true' || needs.detect-changes.outputs.frontend-changed == 'true'
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Run Trivy vulnerability scanner
+              uses: aquasecurity/trivy-action@master
+              with:
+                  scan-type: 'fs'
+                  scan-ref: '.'
+                  format: 'sarif'
+                  output: 'trivy-results.sarif'
+
+            - name: Upload Trivy scan results to GitHub Security tab
+              uses: github/codeql-action/upload-sarif@v3
+              if: always()
+              with:
+                  sarif_file: 'trivy-results.sarif'
+
+    # Build and Push Docker Images
+    build-and-push:
+        needs: [detect-changes, build-check]
+        if: always() && needs.build-check.result == 'success' && (needs.detect-changes.outputs.backend-changed == 'true' || needs.detect-changes.outputs.frontend-changed == 'true') && needs.detect-changes.outputs.should-deploy == 'true'
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Authenticate to Google Cloud
+              uses: google-github-actions/auth@v2
+              with:
+                  credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+            - name: Configure Docker for GCP
+              run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev
+
+            - name: Build and push backend image
+              if: needs.detect-changes.outputs.backend-changed == 'true'
+              run: |
+                  IMAGE_TAG=${{ env.REGISTRY_URL }}/${{ env.PROJECT_NAME }}-backend:${{ github.sha }}
+                  LATEST_TAG=${{ env.REGISTRY_URL }}/${{ env.PROJECT_NAME }}-backend:latest
+
+                  docker build -t $IMAGE_TAG -t $LATEST_TAG ./backend
+                  docker push $IMAGE_TAG
+                  docker push $LATEST_TAG
+
+                  echo "BACKEND_IMAGE=$IMAGE_TAG" >> $GITHUB_ENV
+
+            - name: Build and push frontend image
+              if: needs.detect-changes.outputs.frontend-changed == 'true'
+              run: |
+                  IMAGE_TAG=${{ env.REGISTRY_URL }}/${{ env.PROJECT_NAME }}-frontend:${{ github.sha }}
+                  LATEST_TAG=${{ env.REGISTRY_URL }}/${{ env.PROJECT_NAME }}-frontend:latest
+
+                  docker build -t $IMAGE_TAG -t $LATEST_TAG ./frontend
+                  docker push $IMAGE_TAG
+                  docker push $LATEST_TAG
+
+                  echo "FRONTEND_IMAGE=$IMAGE_TAG" >> $GITHUB_ENV
+
+    # Deploy with Docker Compose (skipping Terraform - manage infrastructure manually)
+    deploy-application:
+        needs: [detect-changes, build-and-push]
+        if: always() && needs.detect-changes.outputs.should-deploy == 'true' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+        runs-on: ubuntu-latest
+
+        env:
+            ENVIRONMENT: ${{ needs.detect-changes.outputs.environment }}
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Authenticate to Google Cloud
+              uses: google-github-actions/auth@v2
+              with:
+                  credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+            - name: Setup gcloud CLI
+              uses: google-github-actions/setup-gcloud@v2
+
+            - name: Configure Docker for GCP
+              run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev
+
+            - name: Prepare nginx configuration
+              run: |
+                  # Use environment-specific nginx configuration
+                  if [[ "${{ env.ENVIRONMENT }}" == "production" ]]; then
+                    NGINX_TEMPLATE="nginx.reverse-proxy.production.conf"
+                    DOMAIN="${{ vars.PRODUCTION_DOMAIN || 'your-domain.com' }}"
+                    SERVER_PORT="${{ vars.PRODUCTION_PORT || '80' }}"
+                    BACKEND_PORT="3000"
+                  else
+                    NGINX_TEMPLATE="nginx.reverse-proxy.staging.conf"
+                    DOMAIN="${{ vars.STAGING_DOMAIN || 'localhost' }}"
+                    SERVER_PORT="${{ vars.STAGING_PORT || '80' }}"
+                    BACKEND_PORT="3000"
+                  fi
+
+                  echo "🔧 Using template: $NGINX_TEMPLATE"
+                  echo "🌐 Domain: $DOMAIN"
+                  echo "🔌 Port: $SERVER_PORT"
+
+                  # Create nginx config from template with variable substitution
+                  sed -e "s/{{DOMAIN}}/$DOMAIN/g" \
+                      -e "s/{{SERVER_PORT}}/$SERVER_PORT/g" \
+                      -e "s/{{BACKEND_PORT}}/$BACKEND_PORT/g" \
+                      $NGINX_TEMPLATE > nginx.reverse-proxy.conf
+                      
+                  echo "✅ Generated nginx.reverse-proxy.conf"
+                  cat nginx.reverse-proxy.conf
+
+            - name: Update Docker Compose with new image tags
+              run: |
+                  # Use environment-specific compose file
+                  COMPOSE_FILE="docker-compose.${{ env.ENVIRONMENT }}.yml"
+
+                  # Update compose file with new image tags
+                  if [[ -n "${{ env.BACKEND_IMAGE }}" ]]; then
+                    sed -i "s|image: .*attendance-tracker-backend.*|image: ${{ env.BACKEND_IMAGE }}|g" $COMPOSE_FILE
+                  fi
+
+                  if [[ -n "${{ env.FRONTEND_IMAGE }}" ]]; then
+                    sed -i "s|image: .*attendance-tracker-frontend.*|image: ${{ env.FRONTEND_IMAGE }}|g" $COMPOSE_FILE
+                  fi
+
+            - name: Setup SSH
+              run: |
+                  # Create SSH directory and add private key
+                  mkdir -p ~/.ssh
+
+                  # Debug: Show environment
+                  echo "🔍 Environment: ${{ env.ENVIRONMENT }}"
+
+                  # Debug: Show which secrets we're trying to access
+                  if [[ "${{ env.ENVIRONMENT }}" == "production" ]]; then
+                    echo "🔍 Looking for secrets: PRODUCTION_SERVER_HOST, PRODUCTION_SSH_PRIVATE_KEY, PRODUCTION_SERVER_USER"
+                  else
+                    echo "🔍 Looking for secrets: STAGING_SERVER_HOST, STAGING_SSH_PRIVATE_KEY, STAGING_SERVER_USER"
+                  fi
+
+                  # Use environment-specific SSH key and server host
+                  if [[ "${{ env.ENVIRONMENT }}" == "production" ]]; then
+                    SERVER_HOST="${{ secrets.PRODUCTION_SERVER_HOST }}"
+                    SSH_PRIVATE_KEY="${{ secrets.PRODUCTION_SSH_PRIVATE_KEY }}"
+                    SERVER_USER="${{ secrets.PRODUCTION_SERVER_USER }}"
+                    echo "🔍 Using production server configuration"
+                  else
+                    SERVER_HOST="${{ secrets.STAGING_SERVER_HOST }}"
+                    SSH_PRIVATE_KEY="${{ secrets.STAGING_SSH_PRIVATE_KEY }}"
+                    SERVER_USER="${{ secrets.STAGING_SERVER_USER }}"
+                    echo "🔍 Using staging server configuration"
+                  fi
+
+                  # Debug: Show what SERVER_HOST we're using (mask for security)
+                  echo "🔍 SERVER_HOST: ${SERVER_HOST:0:3}***${SERVER_HOST: -3}"
+                  echo "🔍 SERVER_USER: ${SERVER_USER:0:2}***${SERVER_USER: -2}"
+
+                  # Check if SERVER_HOST is set
+                  if [[ -z "$SERVER_HOST" ]]; then
+                    echo "❌ SERVER_HOST is empty! Check your secrets configuration."
+                    echo "Required secrets for ${{ env.ENVIRONMENT }}:"
+                    if [[ "${{ env.ENVIRONMENT }}" == "production" ]]; then
+                      echo "  - PRODUCTION_SERVER_HOST"
+                      echo "  - PRODUCTION_SSH_PRIVATE_KEY"
+                      echo "  - PRODUCTION_SERVER_USER"
+                    else
+                      echo "  - STAGING_SERVER_HOST"
+                      echo "  - STAGING_SSH_PRIVATE_KEY"
+                      echo "  - STAGING_SERVER_USER"
+                    fi
+                    exit 1
+                  fi
+
+                  # Check if SERVER_USER is set
+                  if [[ -z "$SERVER_USER" ]]; then
+                    echo "❌ SERVER_USER is empty! Check your secrets configuration."
+                    echo "Required secrets for ${{ env.ENVIRONMENT }}:"
+                    if [[ "${{ env.ENVIRONMENT }}" == "production" ]]; then
+                      echo "  - PRODUCTION_SERVER_USER"
+                    else
+                      echo "  - STAGING_SERVER_USER"
+                    fi
+                    exit 1
+                  fi
+
+                  # Check if SSH_PRIVATE_KEY is set
+                  if [[ -z "$SSH_PRIVATE_KEY" ]]; then
+                    echo "❌ SSH_PRIVATE_KEY is empty! Check your secrets configuration."
+                    echo "Required secrets for ${{ env.ENVIRONMENT }}:"
+                    if [[ "${{ env.ENVIRONMENT }}" == "production" ]]; then
+                      echo "  - PRODUCTION_SSH_PRIVATE_KEY"
+                    else
+                      echo "  - STAGING_SSH_PRIVATE_KEY"
+                    fi
+                    exit 1
+                  fi
+
+                  # Set up SSH key
+                  echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+                  chmod 600 ~/.ssh/id_rsa
+
+                  # Add server to known_hosts to avoid SSH verification prompt
+                  ssh-keyscan -H "$SERVER_HOST" >> ~/.ssh/known_hosts
+                  echo "✅ Added $SERVER_HOST to known_hosts"
+
+                  # Export variables for next step
+                  echo "SERVER_HOST=$SERVER_HOST" >> $GITHUB_ENV
+                  echo "SERVER_USER=$SERVER_USER" >> $GITHUB_ENV
+
+            - name: Deploy to Server
+              run: |
+                  echo "🚀 Deploying to ${{ env.ENVIRONMENT }} server..."
+
+                  # Use environment variables set in previous step
+                  echo "🔍 SERVER_HOST: ${SERVER_HOST}"
+                  echo "🔍 SERVER_USER: ${SERVER_USER}"
+
+                  # Define compose file based on environment
+                  if [[ "${{ env.ENVIRONMENT }}" == "production" ]]; then
+                    COMPOSE_FILE="docker-compose.prod.yml"
+                  else
+                    COMPOSE_FILE="docker-compose.staging.yml"
+                  fi
+
+                  PROJECT_DIR="/home/${SERVER_USER}/attendance-tracker"
+
+                  echo "📡 Connecting to ${SERVER_USER}@${SERVER_HOST}..."
+
+                  # Copy updated docker-compose file to server
+                  scp -i ~/.ssh/id_rsa $COMPOSE_FILE nginx.reverse-proxy.conf ${SERVER_USER}@${SERVER_HOST}:${PROJECT_DIR}/
+
+                  # Execute deployment commands on the server
+                  ssh -i ~/.ssh/id_rsa ${SERVER_USER}@${SERVER_HOST} << EOF
+                    set -e
+                    
+                    echo "📁 Navigating to project directory..."
+                    cd ${PROJECT_DIR}
+                    
+                    echo "🔐 Authenticating with Google Cloud..."
+                    gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev
+                    
+                    echo "📦 Pulling latest Docker images..."
+                    docker-compose -f $COMPOSE_FILE pull
+                    
+                    echo "🔄 Deploying with zero-downtime restart..."
+                    docker-compose -f $COMPOSE_FILE up -d
+                    
+                    echo "🧹 Cleaning up old Docker images..."
+                    docker image prune -f
+                    
+                    echo "✅ Deployment completed successfully!"
+                    
+                    echo "📊 Service status:"
+                    docker-compose -f $COMPOSE_FILE ps
+                  EOF
+
+                  echo "✅ Deployment to ${{ env.ENVIRONMENT }} server completed!"
+
+    # Notification
+    notify:
+        needs: [deploy-application]
         if: always()
-        with:
-          sarif_file: 'trivy-results.sarif'
+        runs-on: ubuntu-latest
 
-  # Build and Push Docker Images
-  build-and-push:
-    needs: [detect-changes, build-check]
-    if: always() && needs.build-check.result == 'success' && (needs.detect-changes.outputs.backend-changed == 'true' || needs.detect-changes.outputs.frontend-changed == 'true') && needs.detect-changes.outputs.should-deploy == 'true'
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-      
-      - name: Configure Docker for GCP
-        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev
-      
-      - name: Build and push backend image
-        if: needs.detect-changes.outputs.backend-changed == 'true'
-        run: |
-          IMAGE_TAG=${{ env.REGISTRY_URL }}/${{ env.PROJECT_NAME }}-backend:${{ github.sha }}
-          LATEST_TAG=${{ env.REGISTRY_URL }}/${{ env.PROJECT_NAME }}-backend:latest
-          
-          docker build -t $IMAGE_TAG -t $LATEST_TAG ./backend
-          docker push $IMAGE_TAG
-          docker push $LATEST_TAG
-          
-          echo "BACKEND_IMAGE=$IMAGE_TAG" >> $GITHUB_ENV
-      
-      - name: Build and push frontend image
-        if: needs.detect-changes.outputs.frontend-changed == 'true'
-        run: |
-          IMAGE_TAG=${{ env.REGISTRY_URL }}/${{ env.PROJECT_NAME }}-frontend:${{ github.sha }}
-          LATEST_TAG=${{ env.REGISTRY_URL }}/${{ env.PROJECT_NAME }}-frontend:latest
-          
-          docker build -t $IMAGE_TAG -t $LATEST_TAG ./frontend
-          docker push $IMAGE_TAG
-          docker push $LATEST_TAG
-          
-          echo "FRONTEND_IMAGE=$IMAGE_TAG" >> $GITHUB_ENV
-
-  # Deploy with Docker Compose (skipping Terraform - manage infrastructure manually)
-  deploy-application:
-    needs: [detect-changes, build-and-push]
-    if: always() && needs.detect-changes.outputs.should-deploy == 'true' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
-    runs-on: ubuntu-latest
-    
-    env:
-      ENVIRONMENT: ${{ needs.detect-changes.outputs.environment }}
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-      
-      - name: Setup gcloud CLI
-        uses: google-github-actions/setup-gcloud@v2
-      
-      - name: Configure Docker for GCP
-        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev
-      
-      - name: Prepare nginx configuration
-        run: |
-          # Use environment-specific nginx configuration
-          if [[ "${{ env.ENVIRONMENT }}" == "production" ]]; then
-            NGINX_TEMPLATE="nginx.reverse-proxy.production.conf"
-            DOMAIN="${{ vars.PRODUCTION_DOMAIN || 'your-domain.com' }}"
-            SERVER_PORT="${{ vars.PRODUCTION_PORT || '80' }}"
-            BACKEND_PORT="3000"
-          else
-            NGINX_TEMPLATE="nginx.reverse-proxy.staging.conf"
-            DOMAIN="${{ vars.STAGING_DOMAIN || 'localhost' }}"
-            SERVER_PORT="${{ vars.STAGING_PORT || '80' }}"
-            BACKEND_PORT="3000"
-          fi
-          
-          echo "🔧 Using template: $NGINX_TEMPLATE"
-          echo "🌐 Domain: $DOMAIN"
-          echo "🔌 Port: $SERVER_PORT"
-          
-          # Create nginx config from template with variable substitution
-          sed -e "s/{{DOMAIN}}/$DOMAIN/g" \
-              -e "s/{{SERVER_PORT}}/$SERVER_PORT/g" \
-              -e "s/{{BACKEND_PORT}}/$BACKEND_PORT/g" \
-              $NGINX_TEMPLATE > nginx.reverse-proxy.conf
-              
-          echo "✅ Generated nginx.reverse-proxy.conf"
-          cat nginx.reverse-proxy.conf
-      
-      - name: Update Docker Compose with new image tags
-        run: |
-          # Use environment-specific compose file
-          COMPOSE_FILE="docker-compose.${{ env.ENVIRONMENT }}.yml"
-          
-          # Update compose file with new image tags
-          if [[ -n "${{ env.BACKEND_IMAGE }}" ]]; then
-            sed -i "s|image: .*attendance-tracker-backend.*|image: ${{ env.BACKEND_IMAGE }}|g" $COMPOSE_FILE
-          fi
-          
-          if [[ -n "${{ env.FRONTEND_IMAGE }}" ]]; then
-            sed -i "s|image: .*attendance-tracker-frontend.*|image: ${{ env.FRONTEND_IMAGE }}|g" $COMPOSE_FILE
-          fi
-      
-      - name: Setup SSH
-        run: |
-          # Create SSH directory and add private key
-          mkdir -p ~/.ssh
-          
-          # Debug: Show environment
-          echo "🔍 Environment: ${{ env.ENVIRONMENT }}"
-          
-          # Use environment-specific SSH key and server host
-          if [[ "${{ env.ENVIRONMENT }}" == "production" ]]; then
-            SERVER_HOST="${{ secrets.PRODUCTION_SERVER_HOST }}"
-            SSH_PRIVATE_KEY="${{ secrets.PRODUCTION_SSH_PRIVATE_KEY }}"
-            echo "🔍 Using production server configuration"
-          else
-            SERVER_HOST="${{ secrets.STAGING_SERVER_HOST }}"
-            SSH_PRIVATE_KEY="${{ secrets.STAGING_SSH_PRIVATE_KEY }}"
-            echo "🔍 Using staging server configuration"
-          fi
-          
-          # Debug: Show what SERVER_HOST we're using (mask for security)
-          echo "🔍 SERVER_HOST: ${SERVER_HOST:0:3}***${SERVER_HOST: -3}"
-          
-          # Check if SERVER_HOST is set
-          if [[ -z "$SERVER_HOST" ]]; then
-            echo "❌ SERVER_HOST is empty! Check your secrets configuration."
-            echo "Required secrets for ${{ env.ENVIRONMENT }}:"
-            if [[ "${{ env.ENVIRONMENT }}" == "production" ]]; then
-              echo "  - PRODUCTION_SERVER_HOST"
-              echo "  - PRODUCTION_SSH_PRIVATE_KEY"
-            else
-              echo "  - STAGING_SERVER_HOST"
-              echo "  - STAGING_SSH_PRIVATE_KEY"
-            fi
-            exit 1
-          fi
-          
-          # Set up SSH key
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          
-          # Add server to known_hosts to avoid SSH verification prompt
-          ssh-keyscan -H "$SERVER_HOST" >> ~/.ssh/known_hosts
-          echo "✅ Added $SERVER_HOST to known_hosts"
-      
-      - name: Deploy to Server
-        run: |
-          echo "🚀 Deploying to ${{ env.ENVIRONMENT }} server..."
-          
-          # Define server connection details based on environment
-          if [[ "${{ env.ENVIRONMENT }}" == "production" ]]; then
-            SERVER_HOST="${{ secrets.PRODUCTION_SERVER_HOST }}"
-            SERVER_USER="${{ secrets.PRODUCTION_SERVER_USER }}"
-            COMPOSE_FILE="docker-compose.prod.yml"
-          else
-            SERVER_HOST="${{ secrets.STAGING_SERVER_HOST }}"
-            SERVER_USER="${{ secrets.STAGING_SERVER_USER }}"
-            COMPOSE_FILE="docker-compose.staging.yml"
-          fi
-          
-          PROJECT_DIR="/home/${SERVER_USER}/attendance-tracker"
-          
-          echo "📡 Connecting to ${SERVER_USER}@${SERVER_HOST}..."
-          
-          # Copy updated docker-compose file to server
-          scp -i ~/.ssh/id_rsa $COMPOSE_FILE nginx.reverse-proxy.conf ${SERVER_USER}@${SERVER_HOST}:${PROJECT_DIR}/
-          
-          # Execute deployment commands on the server
-          ssh -i ~/.ssh/id_rsa ${SERVER_USER}@${SERVER_HOST} << EOF
-            set -e
-            
-            echo "📁 Navigating to project directory..."
-            cd ${PROJECT_DIR}
-            
-            echo "🔐 Authenticating with Google Cloud..."
-            gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev
-            
-            echo "📦 Pulling latest Docker images..."
-            docker-compose -f $COMPOSE_FILE pull
-            
-            echo "🔄 Deploying with zero-downtime restart..."
-            docker-compose -f $COMPOSE_FILE up -d
-            
-            echo "🧹 Cleaning up old Docker images..."
-            docker image prune -f
-            
-            echo "✅ Deployment completed successfully!"
-            
-            echo "📊 Service status:"
-            docker-compose -f $COMPOSE_FILE ps
-          EOF
-          
-          echo "✅ Deployment to ${{ env.ENVIRONMENT }} server completed!"
-
-  # Notification
-  notify:
-    needs: [deploy-application]
-    if: always()
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Notify deployment status
-        run: |
-          if [[ "${{ needs.deploy-application.result }}" == "success" ]]; then
-            echo "✅ Docker images built and pushed successfully!"
-            echo "📦 Images are ready for deployment with Docker Compose"
-          else
-            echo "❌ Build or deployment preparation failed!"
-          fi
+        steps:
+            - name: Notify deployment status
+              run: |
+                  if [[ "${{ needs.deploy-application.result }}" == "success" ]]; then
+                    echo "✅ Docker images built and pushed successfully!"
+                    echo "📦 Images are ready for deployment with Docker Compose"
+                  else
+                    echo "❌ Build or deployment preparation failed!"
+                  fi
