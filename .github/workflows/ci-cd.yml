@@ -47,6 +47,7 @@ jobs:
               uses: dorny/paths-filter@v3
               id: changes
               with:
+                  base: ${{ github.event.before }}
                   filters: |
                       backend:
                         - 'backend/**'
@@ -220,7 +221,8 @@ jobs:
               id: build-backend
               if: needs.detect-changes.outputs.backend-changed == 'true'
               run: |
-                  IMAGE_TAG=${{ env.REGISTRY_URL }}/${{ env.PROJECT_NAME }}-backend:${{ github.sha }}
+                  BRANCH_TAG=$(echo "${GITHUB_REF_NAME}" | tr '/' '-')
+                  IMAGE_TAG=${{ env.REGISTRY_URL }}/${{ env.PROJECT_NAME }}-backend:$BRANCH_TAG
                   LATEST_TAG=${{ env.REGISTRY_URL }}/${{ env.PROJECT_NAME }}-backend:latest
 
                   docker build -t $IMAGE_TAG -t $LATEST_TAG ./backend
@@ -233,7 +235,8 @@ jobs:
               id: build-frontend
               if: needs.detect-changes.outputs.frontend-changed == 'true'
               run: |
-                  IMAGE_TAG=${{ env.REGISTRY_URL }}/${{ env.PROJECT_NAME }}-frontend:${{ github.sha }}
+                  BRANCH_TAG=$(echo "${GITHUB_REF_NAME}" | tr '/' '-')
+                  IMAGE_TAG=${{ env.REGISTRY_URL }}/${{ env.PROJECT_NAME }}-frontend:$BRANCH_TAG
                   LATEST_TAG=${{ env.REGISTRY_URL }}/${{ env.PROJECT_NAME }}-frontend:latest
 
                   docker build -t $IMAGE_TAG -t $LATEST_TAG ./frontend
