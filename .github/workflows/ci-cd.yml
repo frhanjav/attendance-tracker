@@ -63,10 +63,10 @@ jobs:
                   BACKEND_CHANGED="${{ steps.changes.outputs.backend }}"
                   FRONTEND_CHANGED="${{ steps.changes.outputs.frontend }}"
                   DOCKER_COMPOSE_CHANGED="${{ steps.changes.outputs.docker-compose }}"
-                  
+
                   DEPLOY_REASON=""
                   SHOULD_DEPLOY="false"
-                  
+
                   # Build list of what changed
                   CHANGES_LIST=()
                   if [[ "$BACKEND_CHANGED" == "true" ]]; then
@@ -78,7 +78,7 @@ jobs:
                   if [[ "$DOCKER_COMPOSE_CHANGED" == "true" ]]; then
                     CHANGES_LIST+=("docker-compose")
                   fi
-                  
+
                   # Only deploy if there are actual code/config changes
                   if [[ ${#CHANGES_LIST[@]} -gt 0 ]]; then
                     SHOULD_DEPLOY="true"
@@ -87,7 +87,7 @@ jobs:
                     SHOULD_DEPLOY="false"
                     DEPLOY_REASON="No deployable changes detected"
                   fi
-                  
+
                   # Determine deployment environment
                   if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
                     echo "environment=production" >> $GITHUB_OUTPUT
@@ -98,10 +98,10 @@ jobs:
                     SHOULD_DEPLOY="false"
                     DEPLOY_REASON="Not on deployable branch"
                   fi
-                  
+
                   echo "should-deploy=$SHOULD_DEPLOY" >> $GITHUB_OUTPUT
                   echo "deploy-reason=$DEPLOY_REASON" >> $GITHUB_OUTPUT
-                  
+
                   echo "🔍 Deployment decision: $SHOULD_DEPLOY"
                   echo "📝 Reason: $DEPLOY_REASON"
 
@@ -315,7 +315,7 @@ jobs:
                   else
                     echo "ℹ️ Frontend image not updated - using existing image"
                   fi
-                  
+
                   echo "📄 Docker Compose file updated:"
                   head -20 $COMPOSE_FILE
 
@@ -484,67 +484,63 @@ jobs:
                   echo '🐳 Checking Docker and Docker Compose...'
                   docker --version
                   docker-compose --version
-                  
+
                   echo '🔍 Checking current Docker containers...'
                   docker ps -a || echo 'No containers found'
 
                   echo '📦 Pulling latest Docker images...'
-                  # Use newgrp to apply docker group membership in current session
-                  newgrp docker -c \"
-                    set -e  # Exit on any error
-                    echo '🔍 Pulling images...'
-                    docker-compose -f $COMPOSE_FILE pull || (echo '❌ Failed to pull images' && exit 1)
-                    
-                    echo '🔄 Stopping old containers...'
-                    docker-compose -f $COMPOSE_FILE down || (echo '❌ Failed to stop containers' && exit 1)
-                    
-                    echo '🚀 Starting new containers...'
-                    docker-compose -f $COMPOSE_FILE up -d || (echo '❌ Failed to start containers' && exit 1)
-                    
-                    echo '⏳ Waiting for containers to be ready...'
-                    sleep 30
-                    
-                    echo '🔍 Verifying container health...'
-                    # Check if all containers are running
-                    RUNNING_CONTAINERS=\\\$(docker-compose -f $COMPOSE_FILE ps --services --filter status=running | wc -l)
-                    TOTAL_CONTAINERS=\\\$(docker-compose -f $COMPOSE_FILE ps --services | wc -l)
-                    
-                    echo \\\"Running containers: \\\$RUNNING_CONTAINERS/\\\$TOTAL_CONTAINERS\\\"
-                    
-                    if [ \\\$RUNNING_CONTAINERS -ne \\\$TOTAL_CONTAINERS ]; then
-                      echo '❌ Not all containers are running!'
-                      docker-compose -f $COMPOSE_FILE ps
-                      docker-compose -f $COMPOSE_FILE logs --tail=20
-                      exit 1
-                    fi
-                    
-                    echo '🔍 Testing backend health endpoint...'
-                    BACKEND_CONTAINER=\\\"attendance_backend_${{ env.ENVIRONMENT }}\\\"
-                    for i in {1..10}; do
-                      if docker exec \\\$BACKEND_CONTAINER wget -q --spider http://localhost:3000/api/v1/health 2>/dev/null; then
-                        echo '✅ Backend health check passed!'
-                        break
-                      else
-                        echo \\\"⏳ Health check attempt \\\$i/10...\\\"
-                        if [ \\\$i -eq 10 ]; then
-                          echo '❌ Backend health check failed after 10 attempts!'
-                          docker logs \\\$BACKEND_CONTAINER --tail=20
-                          exit 1
-                        fi
-                        sleep 5
-                      fi
-                    done
-                    
-                    echo '🧹 Cleaning up old Docker images...'
-                    docker image prune -f
-                    
-                    echo '✅ Deployment completed successfully!'
-                    echo '📊 Service status:'
+                  set -e  # Exit on any error
+                  echo '🔍 Pulling images...'
+                  docker-compose -f $COMPOSE_FILE pull || (echo '❌ Failed to pull images' && exit 1)
+
+                  echo '🔄 Stopping old containers...'
+                  docker-compose -f $COMPOSE_FILE down || (echo '❌ Failed to stop containers' && exit 1)
+
+                  echo '🚀 Starting new containers...'
+                  docker-compose -f $COMPOSE_FILE up -d || (echo '❌ Failed to start containers' && exit 1)
+
+                  echo '⏳ Waiting for containers to be ready...'
+                  sleep 30
+
+                  echo '🔍 Verifying container health...'
+                  # Check if all containers are running
+                  RUNNING_CONTAINERS=$(docker-compose -f $COMPOSE_FILE ps --services --filter status=running | wc -l)
+                  TOTAL_CONTAINERS=$(docker-compose -f $COMPOSE_FILE ps --services | wc -l)
+
+                  echo "Running containers: $RUNNING_CONTAINERS/$TOTAL_CONTAINERS"
+
+                  if [ $RUNNING_CONTAINERS -ne $TOTAL_CONTAINERS ]; then
+                    echo '❌ Not all containers are running!'
                     docker-compose -f $COMPOSE_FILE ps
-                    echo '🔍 Container logs (last 5 lines):'
-                    docker-compose -f $COMPOSE_FILE logs --tail=5
-                  \"
-                  "
+                    docker-compose -f $COMPOSE_FILE logs --tail=20
+                    exit 1
+                  fi
+
+                  echo '🔍 Testing backend health endpoint...'
+                  BACKEND_CONTAINER="attendance_backend_${{ env.ENVIRONMENT }}"
+                  for i in {1..10}; do
+                    if docker exec $BACKEND_CONTAINER wget -q --spider http://localhost:3000/api/v1/health 2>/dev/null; then
+                      echo '✅ Backend health check passed!'
+                      break
+                    else
+                      echo "⏳ Health check attempt $i/10..."
+                      if [ $i -eq 10 ]; then
+                        echo '❌ Backend health check failed after 10 attempts!'
+                        docker logs $BACKEND_CONTAINER --tail=20
+                        exit 1
+                      fi
+                      sleep 5
+                    fi
+                  done
+
+                  echo '🧹 Cleaning up old Docker images...'
+                  docker image prune -f
+
+                  echo '✅ Deployment completed successfully!'
+                  echo '📊 Service status:'
+                  docker-compose -f $COMPOSE_FILE ps
+                  echo '🔍 Container logs (last 5 lines):'
+                  docker-compose -f $COMPOSE_FILE logs --tail=5
 
                   echo "✅ Deployment to ${{ env.ENVIRONMENT }} server completed!"
 
