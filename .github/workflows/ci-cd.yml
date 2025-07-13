@@ -21,7 +21,7 @@ env:
 
     # Application Configuration
     PROJECT_NAME: attendance-tracker
-    
+
     # Domain Configuration
     STAGING_DOMAIN: ${{ vars.STAGING_DOMAIN || 'staging.timetable.leverage.blog' }}
     PRODUCTION_DOMAIN: ${{ vars.PRODUCTION_DOMAIN || 'timetable.leverage.blog' }}
@@ -33,7 +33,6 @@ jobs:
         outputs:
             backend-changed: ${{ steps.changes.outputs.backend }}
             frontend-changed: ${{ steps.changes.outputs.frontend }}
-            terraform-changed: ${{ steps.changes.outputs.terraform }}
             docker-compose-changed: ${{ steps.changes.outputs.docker-compose }}
             should-deploy: ${{ steps.deploy-check.outputs.should-deploy }}
             environment: ${{ steps.deploy-check.outputs.environment }}
@@ -50,12 +49,8 @@ jobs:
                   filters: |
                       backend:
                         - 'backend/**'
-                        - 'backend/Dockerfile'
                       frontend:
                         - 'frontend/**'
-                        - 'frontend/Dockerfile'
-                      terraform:
-                        - 'terraform/**'
                       docker-compose:
                         - 'docker-compose*.yml'
                         - 'nginx.reverse-proxy.*.conf'
@@ -68,9 +63,6 @@ jobs:
                     echo "should-deploy=true" >> $GITHUB_OUTPUT
                     echo "environment=production" >> $GITHUB_OUTPUT
                   elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
-                    echo "should-deploy=true" >> $GITHUB_OUTPUT
-                    echo "environment=staging" >> $GITHUB_OUTPUT
-                  elif [[ "${{ steps.changes.outputs.terraform }}" == "true" ]]; then
                     echo "should-deploy=true" >> $GITHUB_OUTPUT
                     echo "environment=staging" >> $GITHUB_OUTPUT
                   else
@@ -240,27 +232,24 @@ jobs:
                   if [[ "${{ env.ENVIRONMENT }}" == "production" ]]; then
                     NGINX_TEMPLATE="nginx.reverse-proxy.production.conf"
                     DOMAIN="${{ env.PRODUCTION_DOMAIN }}"
-                    SERVER_PORT="80"
-                    BACKEND_PORT="3000"
                   else
-                    NGINX_TEMPLATE="nginx.reverse-proxy.staging-ssl.conf"
+                    NGINX_TEMPLATE="nginx.reverse-proxy.staging.conf"
                     DOMAIN="${{ env.STAGING_DOMAIN }}"
-                    SERVER_PORT="80"
-                    BACKEND_PORT="3000"
                   fi
+
+                  SERVER_PORT="80"
+                  BACKEND_PORT="3000"
 
                   echo "🔧 Using template: $NGINX_TEMPLATE"
                   echo "🌐 Domain: $DOMAIN"
                   echo "🔌 Port: $SERVER_PORT"
 
-                  # Create nginx config from template with variable substitution
-                  sed -e "s/{{DOMAIN}}/$DOMAIN/g" \
-                      -e "s/{{SERVER_PORT}}/$SERVER_PORT/g" \
-                      -e "s/{{BACKEND_PORT}}/$BACKEND_PORT/g" \
-                      $NGINX_TEMPLATE > nginx.reverse-proxy.conf
+                  # Copy the environment-specific nginx config
+                  cp $NGINX_TEMPLATE nginx.reverse-proxy.conf
                       
-                  echo "✅ Generated nginx.reverse-proxy.conf"
-                  cat nginx.reverse-proxy.conf
+                  echo "✅ Using nginx config for ${{ env.ENVIRONMENT }}"
+                  echo "📄 Nginx config preview:"
+                  head -20 nginx.reverse-proxy.conf
 
             - name: Update Docker Compose with new image tags
               run: |
@@ -379,7 +368,7 @@ jobs:
 
                   # Define compose file and database URL based on environment
                   if [[ "${{ env.ENVIRONMENT }}" == "production" ]]; then
-                    COMPOSE_FILE="docker-compose.prod.yml"
+                    COMPOSE_FILE="docker-compose.production.yml"
                     DATABASE_URL="${{ secrets.PRODUCTION_DATABASE_URL }}"
                     OAUTH_CLIENT_ID="${{ secrets.GOOGLE_CLIENT_ID }}"
                     OAUTH_CLIENT_SECRET="${{ secrets.GOOGLE_CLIENT_SECRET }}"
@@ -423,28 +412,69 @@ jobs:
                   cd ${PROJECT_DIR}
 
                   echo ' Creating environment file with database URL from GitHub secrets...'
-                  echo \"AIVEN_DATABASE_URL=$DATABASE_URL\" > .env
+                  echo \"DATABASE_URL=$DATABASE_URL\" > .env
                   echo \"JWT_SECRET=${{ secrets.JWT_SECRET || 'staging-jwt-secret-changeme' }}\" >> .env
                   echo \"NODE_ENV=${{ env.ENVIRONMENT }}\" >> .env
                   echo \"GOOGLE_CLIENT_ID=$OAUTH_CLIENT_ID\" >> .env
                   echo \"GOOGLE_CLIENT_SECRET=$OAUTH_CLIENT_SECRET\" >> .env
                   echo \"FRONTEND_URL=https://$DOMAIN\" >> .env
-                  echo \"GOOGLE_CALLBACK_URL=https://$DOMAIN/auth/google/callback\" >> .env
+                  echo \"GOOGLE_CALLBACK_URL=https://$DOMAIN/api/v1/auth/google/callback\" >> .env
                   echo 'Environment file created'
 
                   echo '📦 Pulling latest Docker images...'
                   # Use newgrp to apply docker group membership in current session
                   newgrp docker -c \"
-                    docker-compose -f $COMPOSE_FILE pull && \\
-                    echo '🔄 Deploying with zero-downtime restart...' && \\
-                    docker-compose -f $COMPOSE_FILE up -d && \\
-                    echo '🧹 Cleaning up old Docker images...' && \\
-                    docker image prune -f && \\
-                    echo '✅ Deployment completed successfully!' && \\
-                    echo '📊 Service status:' && \\
-                    docker-compose -f $COMPOSE_FILE ps && \\
-                    echo '🔍 Container logs (last 10 lines):' && \\
-                    docker-compose -f $COMPOSE_FILE logs --tail=10
+                    set -e  # Exit on any error
+                    echo '🔍 Pulling images...'
+                    docker-compose -f $COMPOSE_FILE pull || (echo '❌ Failed to pull images' && exit 1)
+                    
+                    echo '🔄 Stopping old containers...'
+                    docker-compose -f $COMPOSE_FILE down || (echo '❌ Failed to stop containers' && exit 1)
+                    
+                    echo '🚀 Starting new containers...'
+                    docker-compose -f $COMPOSE_FILE up -d || (echo '❌ Failed to start containers' && exit 1)
+                    
+                    echo '⏳ Waiting for containers to be ready...'
+                    sleep 30
+                    
+                    echo '🔍 Verifying container health...'
+                    # Check if all containers are running
+                    RUNNING_CONTAINERS=\\\$(docker-compose -f $COMPOSE_FILE ps --services --filter status=running | wc -l)
+                    TOTAL_CONTAINERS=\\\$(docker-compose -f $COMPOSE_FILE ps --services | wc -l)
+                    
+                    echo \\\"Running containers: \\\$RUNNING_CONTAINERS/\\\$TOTAL_CONTAINERS\\\"
+                    
+                    if [ \\\$RUNNING_CONTAINERS -ne \\\$TOTAL_CONTAINERS ]; then
+                      echo '❌ Not all containers are running!'
+                      docker-compose -f $COMPOSE_FILE ps
+                      docker-compose -f $COMPOSE_FILE logs --tail=20
+                      exit 1
+                    fi
+                    
+                    echo '🔍 Testing backend health endpoint...'
+                    for i in {1..10}; do
+                      if docker exec attendance_backend_staging wget -q --spider http://localhost:3000/api/v1/health 2>/dev/null; then
+                        echo '✅ Backend health check passed!'
+                        break
+                      else
+                        echo \\\"⏳ Health check attempt \\\$i/10...\\\"
+                        if [ \\\$i -eq 10 ]; then
+                          echo '❌ Backend health check failed after 10 attempts!'
+                          docker logs attendance_backend_staging --tail=20
+                          exit 1
+                        fi
+                        sleep 5
+                      fi
+                    done
+                    
+                    echo '🧹 Cleaning up old Docker images...'
+                    docker image prune -f
+                    
+                    echo '✅ Deployment completed successfully!'
+                    echo '📊 Service status:'
+                    docker-compose -f $COMPOSE_FILE ps
+                    echo '🔍 Container logs (last 5 lines):'
+                    docker-compose -f $COMPOSE_FILE logs --tail=5
                   \"
                   "
 
