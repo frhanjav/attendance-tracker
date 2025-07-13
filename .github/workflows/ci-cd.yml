@@ -483,22 +483,22 @@ jobs:
 
                   echo '🐳 Checking Docker and Docker Compose...'
                   docker --version
-                  docker compose version
+                  docker-compose version
 
                   echo '📦 Pulling latest Docker images...'
-                  if ! docker compose -f $COMPOSE_FILE pull; then
+                  if ! docker-compose -f $COMPOSE_FILE pull; then
                     echo '❌ Failed to pull images'
                     exit 1
                   fi
 
                   echo '🔄 Stopping old containers...'
-                  if ! docker compose -f $COMPOSE_FILE down; then
+                  if ! docker-compose -f $COMPOSE_FILE down; then
                     echo '❌ Failed to stop containers'
                     exit 1
                   fi
 
                   echo '🚀 Starting new containers...'
-                  if ! docker compose -f $COMPOSE_FILE up -d; then
+                  if ! docker-compose -f $COMPOSE_FILE up -d; then
                     echo '❌ Failed to start containers'
                     exit 1
                   fi
@@ -509,8 +509,8 @@ jobs:
                   echo '🔍 Verifying container health...'
                   FAILED_SERVICES=""
 
-                  for service in \$(docker compose -f $COMPOSE_FILE ps --services); do
-                    CONTAINER_ID=\$(docker compose -f $COMPOSE_FILE ps -q \$service)
+                  for service in \$(docker-compose -f $COMPOSE_FILE ps --services); do
+                    CONTAINER_ID=\$(docker-compose -f $COMPOSE_FILE ps -q \$service)
                     
                     if [[ -z "\$CONTAINER_ID" ]]; then
                       echo "❌ Service \$service - No container found"
@@ -538,11 +538,11 @@ jobs:
                     echo '❌ Some services are not running properly!'
                     echo "Failed services:\$FAILED_SERVICES"
                     echo '📊 Current container status:'
-                    docker compose -f $COMPOSE_FILE ps
+                    docker-compose -f $COMPOSE_FILE ps
                     echo '📋 Recent logs from failed services:'
                     for service in \$FAILED_SERVICES; do
                       echo "--- Logs for \$service ---"
-                      docker compose -f $COMPOSE_FILE logs --tail=10 \$service
+                      docker-compose -f $COMPOSE_FILE logs --tail=10 \$service
                     done
                     exit 1
                   fi
@@ -573,9 +573,9 @@ jobs:
 
                   echo '✅ Deployment completed successfully!'
                   echo '📊 Service status:'
-                  docker compose -f $COMPOSE_FILE ps
+                  docker-compose -f $COMPOSE_FILE ps
                   echo '🔍 Container logs (last 5 lines):'
-                  docker compose -f $COMPOSE_FILE logs --tail=5
+                  docker-compose -f $COMPOSE_FILE logs --tail=5
                   EOF
 
     # Notification
