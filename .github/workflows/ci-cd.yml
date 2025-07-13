@@ -541,9 +541,8 @@ jobs:
                   docker-compose -f $COMPOSE_FILE ps
                   echo '🔍 Container logs (last 5 lines):'
                   docker-compose -f $COMPOSE_FILE logs --tail=5
-
-                  echo "✅ Deployment to ${{ env.ENVIRONMENT }} server completed!"
-
+                  echo '✅ Deployment to ${{ env.ENVIRONMENT }} server completed!'
+                  "
     # Notification
     notify:
         needs: [deploy-application]
