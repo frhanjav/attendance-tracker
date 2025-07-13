@@ -104,7 +104,6 @@ jobs:
                   
                   echo "🔍 Deployment decision: $SHOULD_DEPLOY"
                   echo "📝 Reason: $DEPLOY_REASON"
-                  fi
 
     # Build Check (No tests yet - placeholder for future)
     build-check:
