@@ -36,6 +36,7 @@ jobs:
             docker-compose-changed: ${{ steps.changes.outputs.docker-compose }}
             should-deploy: ${{ steps.deploy-check.outputs.should-deploy }}
             environment: ${{ steps.deploy-check.outputs.environment }}
+            deploy-reason: ${{ steps.deploy-check.outputs.deploy-reason }}
         steps:
             - name: Checkout code
               uses: actions/checkout@v4
@@ -58,16 +59,51 @@ jobs:
             - name: Check if deployment should happen
               id: deploy-check
               run: |
+                  # Check if any deployable changes occurred
+                  BACKEND_CHANGED="${{ steps.changes.outputs.backend }}"
+                  FRONTEND_CHANGED="${{ steps.changes.outputs.frontend }}"
+                  DOCKER_COMPOSE_CHANGED="${{ steps.changes.outputs.docker-compose }}"
+                  
+                  DEPLOY_REASON=""
+                  SHOULD_DEPLOY="false"
+                  
+                  # Build list of what changed
+                  CHANGES_LIST=()
+                  if [[ "$BACKEND_CHANGED" == "true" ]]; then
+                    CHANGES_LIST+=("backend")
+                  fi
+                  if [[ "$FRONTEND_CHANGED" == "true" ]]; then
+                    CHANGES_LIST+=("frontend")
+                  fi
+                  if [[ "$DOCKER_COMPOSE_CHANGED" == "true" ]]; then
+                    CHANGES_LIST+=("docker-compose")
+                  fi
+                  
+                  # Only deploy if there are actual code/config changes
+                  if [[ ${#CHANGES_LIST[@]} -gt 0 ]]; then
+                    SHOULD_DEPLOY="true"
+                    DEPLOY_REASON="Changes detected in: ${CHANGES_LIST[*]}"
+                  else
+                    SHOULD_DEPLOY="false"
+                    DEPLOY_REASON="No deployable changes detected"
+                  fi
+                  
                   # Determine deployment environment
                   if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-                    echo "should-deploy=true" >> $GITHUB_OUTPUT
                     echo "environment=production" >> $GITHUB_OUTPUT
                   elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
-                    echo "should-deploy=true" >> $GITHUB_OUTPUT
                     echo "environment=staging" >> $GITHUB_OUTPUT
                   else
-                    echo "should-deploy=false" >> $GITHUB_OUTPUT
                     echo "environment=none" >> $GITHUB_OUTPUT
+                    SHOULD_DEPLOY="false"
+                    DEPLOY_REASON="Not on deployable branch"
+                  fi
+                  
+                  echo "should-deploy=$SHOULD_DEPLOY" >> $GITHUB_OUTPUT
+                  echo "deploy-reason=$DEPLOY_REASON" >> $GITHUB_OUTPUT
+                  
+                  echo "🔍 Deployment decision: $SHOULD_DEPLOY"
+                  echo "📝 Reason: $DEPLOY_REASON"
                   fi
 
     # Build Check (No tests yet - placeholder for future)
@@ -165,6 +201,9 @@ jobs:
         needs: [detect-changes, build-check]
         if: always() && needs.build-check.result == 'success' && (needs.detect-changes.outputs.backend-changed == 'true' || needs.detect-changes.outputs.frontend-changed == 'true') && needs.detect-changes.outputs.should-deploy == 'true'
         runs-on: ubuntu-latest
+        outputs:
+            backend-image: ${{ steps.build-backend.outputs.image }}
+            frontend-image: ${{ steps.build-frontend.outputs.image }}
 
         steps:
             - name: Checkout code
@@ -179,6 +218,7 @@ jobs:
               run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev
 
             - name: Build and push backend image
+              id: build-backend
               if: needs.detect-changes.outputs.backend-changed == 'true'
               run: |
                   IMAGE_TAG=${{ env.REGISTRY_URL }}/${{ env.PROJECT_NAME }}-backend:${{ github.sha }}
@@ -188,9 +228,10 @@ jobs:
                   docker push $IMAGE_TAG
                   docker push $LATEST_TAG
 
-                  echo "BACKEND_IMAGE=$IMAGE_TAG" >> $GITHUB_ENV
+                  echo "image=$IMAGE_TAG" >> $GITHUB_OUTPUT
 
             - name: Build and push frontend image
+              id: build-frontend
               if: needs.detect-changes.outputs.frontend-changed == 'true'
               run: |
                   IMAGE_TAG=${{ env.REGISTRY_URL }}/${{ env.PROJECT_NAME }}-frontend:${{ github.sha }}
@@ -200,18 +241,23 @@ jobs:
                   docker push $IMAGE_TAG
                   docker push $LATEST_TAG
 
-                  echo "FRONTEND_IMAGE=$IMAGE_TAG" >> $GITHUB_ENV
+                  echo "image=$IMAGE_TAG" >> $GITHUB_OUTPUT
 
     # Deploy with Docker Compose (skipping Terraform - manage infrastructure manually)
     deploy-application:
         needs: [detect-changes, build-and-push]
-        if: always() && needs.detect-changes.outputs.should-deploy == 'true' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+        if: always() && needs.detect-changes.outputs.should-deploy == 'true' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') && (needs.build-and-push.result == 'success' || needs.build-and-push.result == 'skipped')
         runs-on: ubuntu-latest
 
         env:
             ENVIRONMENT: ${{ needs.detect-changes.outputs.environment }}
 
         steps:
+            - name: Display deployment info
+              run: |
+                  echo "🚀 Deploying to ${{ env.ENVIRONMENT }}"
+                  echo "📝 Deploy reason: ${{ needs.detect-changes.outputs.deploy-reason }}"
+                  echo "🔍 Build job result: ${{ needs.build-and-push.result }}"
             - name: Checkout code
               uses: actions/checkout@v4
 
@@ -256,14 +302,23 @@ jobs:
                   # Use environment-specific compose file
                   COMPOSE_FILE="docker-compose.${{ env.ENVIRONMENT }}.yml"
 
-                  # Update compose file with new image tags
-                  if [[ -n "${{ env.BACKEND_IMAGE }}" ]]; then
-                    sed -i "s|image: .*attendance-tracker-backend.*|image: ${{ env.BACKEND_IMAGE }}|g" $COMPOSE_FILE
+                  # Update compose file with new image tags from build job outputs
+                  if [[ -n "${{ needs.build-and-push.outputs.backend-image }}" ]]; then
+                    echo "🔄 Updating backend image to: ${{ needs.build-and-push.outputs.backend-image }}"
+                    sed -i "s|image: .*attendance-tracker-backend.*|image: ${{ needs.build-and-push.outputs.backend-image }}|g" $COMPOSE_FILE
+                  else
+                    echo "ℹ️ Backend image not updated - using existing image"
                   fi
 
-                  if [[ -n "${{ env.FRONTEND_IMAGE }}" ]]; then
-                    sed -i "s|image: .*attendance-tracker-frontend.*|image: ${{ env.FRONTEND_IMAGE }}|g" $COMPOSE_FILE
+                  if [[ -n "${{ needs.build-and-push.outputs.frontend-image }}" ]]; then
+                    echo "🔄 Updating frontend image to: ${{ needs.build-and-push.outputs.frontend-image }}"
+                    sed -i "s|image: .*attendance-tracker-frontend.*|image: ${{ needs.build-and-push.outputs.frontend-image }}|g" $COMPOSE_FILE
+                  else
+                    echo "ℹ️ Frontend image not updated - using existing image"
                   fi
+                  
+                  echo "📄 Docker Compose file updated:"
+                  head -20 $COMPOSE_FILE
 
             - name: Setup SSH
               run: |
@@ -411,7 +466,11 @@ jobs:
                   echo '📁 Navigating to project directory...'
                   cd ${PROJECT_DIR}
 
-                  echo ' Creating environment file with database URL from GitHub secrets...'
+                  echo '🔍 Checking current working directory and files...'
+                  pwd
+                  ls -la
+
+                  echo '⚙️ Creating environment file with database URL from GitHub secrets...'
                   echo \"DATABASE_URL=$DATABASE_URL\" > .env
                   echo \"JWT_SECRET=${{ secrets.JWT_SECRET || 'staging-jwt-secret-changeme' }}\" >> .env
                   echo \"NODE_ENV=${{ env.ENVIRONMENT }}\" >> .env
@@ -419,7 +478,16 @@ jobs:
                   echo \"GOOGLE_CLIENT_SECRET=$OAUTH_CLIENT_SECRET\" >> .env
                   echo \"FRONTEND_URL=https://$DOMAIN\" >> .env
                   echo \"GOOGLE_CALLBACK_URL=https://$DOMAIN/api/v1/auth/google/callback\" >> .env
-                  echo 'Environment file created'
+                  echo '✅ Environment file created'
+                  echo '📄 Environment file contents:'
+                  cat .env
+
+                  echo '🐳 Checking Docker and Docker Compose...'
+                  docker --version
+                  docker-compose --version
+                  
+                  echo '🔍 Checking current Docker containers...'
+                  docker ps -a || echo 'No containers found'
 
                   echo '📦 Pulling latest Docker images...'
                   # Use newgrp to apply docker group membership in current session
@@ -452,15 +520,16 @@ jobs:
                     fi
                     
                     echo '🔍 Testing backend health endpoint...'
+                    BACKEND_CONTAINER=\\\"attendance_backend_${{ env.ENVIRONMENT }}\\\"
                     for i in {1..10}; do
-                      if docker exec attendance_backend_staging wget -q --spider http://localhost:3000/api/v1/health 2>/dev/null; then
+                      if docker exec \\\$BACKEND_CONTAINER wget -q --spider http://localhost:3000/api/v1/health 2>/dev/null; then
                         echo '✅ Backend health check passed!'
                         break
                       else
                         echo \\\"⏳ Health check attempt \\\$i/10...\\\"
                         if [ \\\$i -eq 10 ]; then
                           echo '❌ Backend health check failed after 10 attempts!'
-                          docker logs attendance_backend_staging --tail=20
+                          docker logs \\\$BACKEND_CONTAINER --tail=20
                           exit 1
                         fi
                         sleep 5
