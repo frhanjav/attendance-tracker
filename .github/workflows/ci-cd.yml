@@ -466,83 +466,84 @@ jobs:
                   set -e
 
                   echo '📁 Navigating to project directory...'
-                  cd ${PROJECT_DIR}
+                  cd /home/\$(whoami)/attendance-tracker
 
                   echo '🔍 Checking current working directory and files...'
                   pwd
                   ls -la
 
-                  echo '⚙️ Creating environment file with database URL from GitHub secrets...'
-                  echo \"DATABASE_URL=$DATABASE_URL\" > .env
-                  echo \"JWT_SECRET=${{ secrets.JWT_SECRET || 'staging-jwt-secret-changeme' }}\" >> .env
-                  echo \"NODE_ENV=${{ env.ENVIRONMENT }}\" >> .env
-                  echo \"GOOGLE_CLIENT_ID=$OAUTH_CLIENT_ID\" >> .env
-                  echo \"GOOGLE_CLIENT_SECRET=$OAUTH_CLIENT_SECRET\" >> .env
-                  echo \"FRONTEND_URL=https://$DOMAIN\" >> .env
-                  echo \"GOOGLE_CALLBACK_URL=https://$DOMAIN/api/v1/auth/google/callback\" >> .env
+                  echo '⚙️ Creating environment file...'
+                  echo 'DATABASE_URL=$DATABASE_URL' > .env
+                  echo 'JWT_SECRET=${{ secrets.JWT_SECRET || 'staging-jwt-secret-changeme' }}' >> .env
+                  echo 'NODE_ENV=${{ env.ENVIRONMENT }}' >> .env
+                  echo 'GOOGLE_CLIENT_ID=$OAUTH_CLIENT_ID' >> .env
+                  echo 'GOOGLE_CLIENT_SECRET=$OAUTH_CLIENT_SECRET' >> .env
+                  echo 'FRONTEND_URL=https://$DOMAIN' >> .env
+                  echo 'GOOGLE_CALLBACK_URL=https://$DOMAIN/api/v1/auth/google/callback' >> .env
                   echo '✅ Environment file created'
-                  echo '📄 Environment file contents:'
-                  cat .env
 
                   echo '🐳 Checking Docker and Docker Compose...'
                   docker --version
                   docker-compose --version
 
-                  echo '🔍 Checking current Docker containers...'
-                  docker ps -a || echo 'No containers found'
-
                   echo '📦 Pulling latest Docker images...'
-                  set -e  # Exit on any error
-                  echo '🔍 Pulling images...'
-                  docker-compose -f $COMPOSE_FILE pull || (echo '❌ Failed to pull images' && exit 1)
+                  if ! docker-compose -f $COMPOSE_FILE pull; then
+                    echo '❌ Failed to pull images'
+                    exit 1
+                  fi
 
                   echo '🔄 Stopping old containers...'
-                  docker-compose -f $COMPOSE_FILE down || (echo '❌ Failed to stop containers' && exit 1)
+                  if ! docker-compose -f $COMPOSE_FILE down; then
+                    echo '❌ Failed to stop containers'
+                    exit 1
+                  fi
 
                   echo '🚀 Starting new containers...'
-                  docker-compose -f $COMPOSE_FILE up -d || (echo '❌ Failed to start containers' && exit 1)
+                  if ! docker-compose -f $COMPOSE_FILE up -d; then
+                    echo '❌ Failed to start containers'
+                    exit 1
+                  fi
 
                   echo '⏳ Waiting for containers to be ready...'
                   sleep 30
 
                   echo '🔍 Verifying container health...'
-
-                  RUNNING_CONTAINERS=$(docker-compose -f $COMPOSE_FILE ps --services | xargs -I {} docker-compose -f $COMPOSE_FILE ps {} | grep -c 'Up' || echo "0")
-                  TOTAL_CONTAINERS=$(docker-compose -f $COMPOSE_FILE ps --services | wc -l)
-
-                  echo "Running containers: $RUNNING_CONTAINERS/$TOTAL_CONTAINERS"
+                  TOTAL_CONTAINERS=\$(docker-compose -f $COMPOSE_FILE ps --services | wc -l | tr -d ' ')
+                  RUNNING_COUNT=0
 
                   echo '🔍 Checking individual service status...'
-                  FAILED_SERVICES=""
-                  SERVICES=\$(docker-compose -f \$COMPOSE_FILE ps --services)
-                  for service in \$SERVICES; do
-                    STATUS=\$(docker-compose -f \$COMPOSE_FILE ps \$service | tail -n +2 | awk '{print \$4}' | head -1)
-                    if [ "\$STATUS" != "Up" ]; then
-                      FAILED_SERVICES="\$FAILED_SERVICES \$service"
-                      echo "❌ Service \$service is not running (Status: \$STATUS)"
+                  FAILED_SERVICES=\"\"
+                  for service in \$(docker-compose -f $COMPOSE_FILE ps --services); do
+                    STATUS=\$(docker-compose -f $COMPOSE_FILE ps \$service | tail -n +2 | awk '{print \$4}' | head -1)
+                    if echo \"\$STATUS\" | grep -q \"Up\"; then
+                      RUNNING_COUNT=\$((RUNNING_COUNT + 1))
+                      echo \"✅ Service \$service is running\"
                     else
-                      echo "✅ Service \$service is running"
+                      FAILED_SERVICES=\"\$FAILED_SERVICES \$service\"
+                      echo \"❌ Service \$service is not running (Status: \$STATUS)\"
                     fi
                   done
 
-                  if [ -n "\$FAILED_SERVICES" ]; then
+                  echo \"Running containers: \$RUNNING_COUNT/\$TOTAL_CONTAINERS\"
+
+                  if [ -n \"\$FAILED_SERVICES\" ]; then
                     echo '❌ Some services are not running!'
-                    docker-compose -f \$COMPOSE_FILE ps
-                    docker-compose -f \$COMPOSE_FILE logs --tail=20
+                    docker-compose -f $COMPOSE_FILE ps
+                    docker-compose -f $COMPOSE_FILE logs --tail=20
                     exit 1
                   fi
 
                   echo '✅ All services are running!'
 
                   echo '🔍 Testing backend health endpoint...'
-                  BACKEND_CONTAINER="attendance_backend_${{ env.ENVIRONMENT }}"
+                  BACKEND_CONTAINER=\"attendance_backend_${{ env.ENVIRONMENT }}\"
                   i=1
                   while [ \$i -le 10 ]; do
                     if docker exec \$BACKEND_CONTAINER wget -q --spider http://localhost:3000/api/v1/health 2>/dev/null; then
                       echo '✅ Backend health check passed!'
                       break
                     else
-                      echo "⏳ Health check attempt \$i/10..."
+                      echo \"⏳ Health check attempt \$i/10...\"
                       if [ \$i -eq 10 ]; then
                         echo '❌ Backend health check failed after 10 attempts!'
                         docker logs \$BACKEND_CONTAINER --tail=20
@@ -561,7 +562,6 @@ jobs:
                   docker-compose -f $COMPOSE_FILE ps
                   echo '🔍 Container logs (last 5 lines):'
                   docker-compose -f $COMPOSE_FILE logs --tail=5
-                  echo '✅ Deployment to ${{ env.ENVIRONMENT }} server completed!'
                   "
     # Notification
     notify:
