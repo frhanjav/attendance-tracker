@@ -69,21 +69,21 @@ jobs:
                   SHOULD_DEPLOY="false"
 
                   # Build list of what changed
-                  CHANGES_LIST=()
+                  CHANGES_LIST=""
                   if [[ "$BACKEND_CHANGED" == "true" ]]; then
-                    CHANGES_LIST+=("backend")
+                    CHANGES_LIST="$CHANGES_LIST backend"
                   fi
                   if [[ "$FRONTEND_CHANGED" == "true" ]]; then
-                    CHANGES_LIST+=("frontend")
+                    CHANGES_LIST="$CHANGES_LIST frontend"
                   fi
                   if [[ "$DOCKER_COMPOSE_CHANGED" == "true" ]]; then
-                    CHANGES_LIST+=("docker-compose")
+                    CHANGES_LIST="$CHANGES_LIST docker-compose"
                   fi
 
                   # Only deploy if there are actual code/config changes
-                  if [[ ${#CHANGES_LIST[@]} -gt 0 ]]; then
+                  if [[ -n "$CHANGES_LIST" ]]; then
                     SHOULD_DEPLOY="true"
-                    DEPLOY_REASON="Changes detected in: ${CHANGES_LIST[*]}"
+                    DEPLOY_REASON="Changes detected in:$CHANGES_LIST"
                   else
                     SHOULD_DEPLOY="false"
                     DEPLOY_REASON="No deployable changes detected"
@@ -514,9 +514,10 @@ jobs:
 
                   echo '🔍 Checking individual service status...'
                   FAILED_SERVICES=""
-                  for service in \$(docker-compose -f \$COMPOSE_FILE ps --services); do
+                  SERVICES=\$(docker-compose -f \$COMPOSE_FILE ps --services)
+                  for service in \$SERVICES; do
                     STATUS=\$(docker-compose -f \$COMPOSE_FILE ps \$service | tail -n +2 | awk '{print \$4}' | head -1)
-                    if [[ "\$STATUS" != "Up" ]]; then
+                    if [ "\$STATUS" != "Up" ]; then
                       FAILED_SERVICES="\$FAILED_SERVICES \$service"
                       echo "❌ Service \$service is not running (Status: \$STATUS)"
                     else
