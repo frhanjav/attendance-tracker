@@ -507,18 +507,31 @@ jobs:
 
                   echo '🔍 Verifying container health...'
 
-                  # Improved health check: count containers that are 'Up' (including healthy)
-                  RUNNING_CONTAINERS=$(docker-compose -f $COMPOSE_FILE ps | grep -c 'Up')
+                  RUNNING_CONTAINERS=$(docker-compose -f $COMPOSE_FILE ps --services | xargs -I {} docker-compose -f $COMPOSE_FILE ps {} | grep -c 'Up' || echo "0")
                   TOTAL_CONTAINERS=$(docker-compose -f $COMPOSE_FILE ps --services | wc -l)
 
                   echo "Running containers: $RUNNING_CONTAINERS/$TOTAL_CONTAINERS"
 
-                  if [ $RUNNING_CONTAINERS -ne $TOTAL_CONTAINERS ]; then
-                    echo '❌ Not all containers are running!'
+                  echo '🔍 Checking individual service status...'
+                  FAILED_SERVICES=()
+                  for service in $(docker-compose -f $COMPOSE_FILE ps --services); do
+                    STATUS=$(docker-compose -f $COMPOSE_FILE ps $service | tail -n +2 | awk '{print $4}' | head -1)
+                    if [[ "$STATUS" != "Up" ]]; then
+                      FAILED_SERVICES+=($service)
+                      echo "❌ Service $service is not running (Status: $STATUS)"
+                    else
+                      echo "✅ Service $service is running"
+                    fi
+                  done
+
+                  if [ ${#FAILED_SERVICES[@]} -gt 0 ]; then
+                    echo '❌ Some services are not running!'
                     docker-compose -f $COMPOSE_FILE ps
                     docker-compose -f $COMPOSE_FILE logs --tail=20
                     exit 1
                   fi
+
+                  echo '✅ All services are running!'
 
                   echo '🔍 Testing backend health endpoint...'
                   BACKEND_CONTAINER="attendance_backend_${{ env.ENVIRONMENT }}"
