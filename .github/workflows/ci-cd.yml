@@ -461,7 +461,7 @@ jobs:
 
                   # Execute deployment commands on the server
                   echo "🔍 Executing deployment..."
-                  ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_HOST} "
+                  ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_HOST} <<EOF
                   set -e
 
                   echo '📁 Navigating to project directory...'
@@ -472,33 +472,33 @@ jobs:
                   ls -la
 
                   echo '⚙️ Creating environment file...'
-                  echo 'DATABASE_URL=$DATABASE_URL' > .env
-                  echo 'JWT_SECRET=${{ secrets.JWT_SECRET || 'staging-jwt-secret-changeme' }}' >> .env
-                  echo 'NODE_ENV=${{ env.ENVIRONMENT }}' >> .env
-                  echo 'GOOGLE_CLIENT_ID=$OAUTH_CLIENT_ID' >> .env
-                  echo 'GOOGLE_CLIENT_SECRET=$OAUTH_CLIENT_SECRET' >> .env
-                  echo 'FRONTEND_URL=https://$DOMAIN' >> .env
-                  echo 'GOOGLE_CALLBACK_URL=https://$DOMAIN/api/v1/auth/google/callback' >> .env
+                  echo "DATABASE_URL=$DATABASE_URL" > .env
+                  echo "JWT_SECRET=${{ secrets.JWT_SECRET || 'staging-jwt-secret-changeme' }}" >> .env
+                  echo "NODE_ENV=${{ env.ENVIRONMENT }}" >> .env
+                  echo "GOOGLE_CLIENT_ID=$OAUTH_CLIENT_ID" >> .env
+                  echo "GOOGLE_CLIENT_SECRET=$OAUTH_CLIENT_SECRET" >> .env
+                  echo "FRONTEND_URL=https://$DOMAIN" >> .env
+                  echo "GOOGLE_CALLBACK_URL=https://$DOMAIN/api/v1/auth/google/callback" >> .env
                   echo '✅ Environment file created'
 
                   echo '🐳 Checking Docker and Docker Compose...'
                   docker --version
-                  docker-compose --version
+                  docker compose version
 
                   echo '📦 Pulling latest Docker images...'
-                  if ! docker-compose -f $COMPOSE_FILE pull; then
+                  if ! docker compose -f $COMPOSE_FILE pull; then
                     echo '❌ Failed to pull images'
                     exit 1
                   fi
 
                   echo '🔄 Stopping old containers...'
-                  if ! docker-compose -f $COMPOSE_FILE down; then
+                  if ! docker compose -f $COMPOSE_FILE down; then
                     echo '❌ Failed to stop containers'
                     exit 1
                   fi
 
                   echo '🚀 Starting new containers...'
-                  if ! docker-compose -f $COMPOSE_FILE up -d; then
+                  if ! docker compose -f $COMPOSE_FILE up -d; then
                     echo '❌ Failed to start containers'
                     exit 1
                   fi
@@ -509,45 +509,40 @@ jobs:
                   echo '🔍 Verifying container health...'
                   FAILED_SERVICES=""
 
-                  for service in $(docker-compose -f $COMPOSE_FILE ps --services); do
-                    CONTAINER_ID=$(docker-compose -f $COMPOSE_FILE ps -q $service)
+                  for service in \$(docker compose -f $COMPOSE_FILE ps --services); do
+                    CONTAINER_ID=\$(docker compose -f $COMPOSE_FILE ps -q \$service)
                     
-                    # Check if container ID was found
-                    if [[ -z "$CONTAINER_ID" ]]; then
-                      echo "❌ Service $service - No container found"
-                      FAILED_SERVICES="$FAILED_SERVICES $service"
+                    if [[ -z "\$CONTAINER_ID" ]]; then
+                      echo "❌ Service \$service - No container found"
+                      FAILED_SERVICES="\$FAILED_SERVICES \$service"
                       continue
                     fi
+
+                    STATUS=\$(docker inspect -f '{{.State.Status}}' \$CONTAINER_ID 2>/dev/null || echo "unknown")
+                    HEALTH=\$(docker inspect -f '{{.State.Health.Status}}' \$CONTAINER_ID 2>/dev/null || echo "none")
                     
-                    # Get container status
-                    STATUS=$(docker inspect -f '{{.State.Status}}' $CONTAINER_ID 2>/dev/null || echo "unknown")
+                    echo "🔍 Service \$service - Status: \$STATUS, Health: \$HEALTH"
                     
-                    # Get health status (if healthcheck is defined)
-                    HEALTH=$(docker inspect -f '{{.State.Health.Status}}' $CONTAINER_ID 2>/dev/null || echo "none")
-                    
-                    echo "🔍 Service $service - Status: $STATUS, Health: $HEALTH"
-                    
-                    # Check if service is healthy
-                    if [[ "$STATUS" != "running" ]]; then
-                      echo "❌ Service $service is not running (Status: $STATUS)"
-                      FAILED_SERVICES="$FAILED_SERVICES $service"
-                    elif [[ "$HEALTH" == "unhealthy" ]]; then
-                      echo "❌ Service $service is unhealthy"
-                      FAILED_SERVICES="$FAILED_SERVICES $service"
+                    if [[ "\$STATUS" != "running" ]]; then
+                      echo "❌ Service \$service is not running (Status: \$STATUS)"
+                      FAILED_SERVICES="\$FAILED_SERVICES \$service"
+                    elif [[ "\$HEALTH" == "unhealthy" ]]; then
+                      echo "❌ Service \$service is unhealthy"
+                      FAILED_SERVICES="\$FAILED_SERVICES \$service"
                     else
-                      echo "✅ Service $service is healthy"
+                      echo "✅ Service \$service is healthy"
                     fi
                   done
 
-                  if [[ -n "$FAILED_SERVICES" ]]; then
+                  if [[ -n "\$FAILED_SERVICES" ]]; then
                     echo '❌ Some services are not running properly!'
-                    echo "Failed services:$FAILED_SERVICES"
+                    echo "Failed services:\$FAILED_SERVICES"
                     echo '📊 Current container status:'
-                    docker-compose -f $COMPOSE_FILE ps
+                    docker compose -f $COMPOSE_FILE ps
                     echo '📋 Recent logs from failed services:'
-                    for service in $FAILED_SERVICES; do
-                      echo "--- Logs for $service ---"
-                      docker-compose -f $COMPOSE_FILE logs --tail=10 $service
+                    for service in \$FAILED_SERVICES; do
+                      echo "--- Logs for \$service ---"
+                      docker compose -f $COMPOSE_FILE logs --tail=10 \$service
                     done
                     exit 1
                   fi
@@ -555,14 +550,14 @@ jobs:
                   echo '✅ All services are running and healthy!'
 
                   echo '🔍 Testing backend health endpoint...'
-                  BACKEND_CONTAINER=\"attendance_backend_${{ env.ENVIRONMENT }}\"
+                  BACKEND_CONTAINER="attendance_backend_${{ env.ENVIRONMENT }}"
                   i=1
                   while [ \$i -le 10 ]; do
                     if docker exec \$BACKEND_CONTAINER wget -q --spider http://localhost:3000/api/v1/health 2>/dev/null; then
                       echo '✅ Backend health check passed!'
                       break
                     else
-                      echo \"⏳ Health check attempt \$i/10...\"
+                      echo "⏳ Health check attempt \$i/10..."
                       if [ \$i -eq 10 ]; then
                         echo '❌ Backend health check failed after 10 attempts!'
                         docker logs \$BACKEND_CONTAINER --tail=20
@@ -578,10 +573,11 @@ jobs:
 
                   echo '✅ Deployment completed successfully!'
                   echo '📊 Service status:'
-                  docker-compose -f $COMPOSE_FILE ps
+                  docker compose -f $COMPOSE_FILE ps
                   echo '🔍 Container logs (last 5 lines):'
-                  docker-compose -f $COMPOSE_FILE logs --tail=5
-                  "
+                  docker compose -f $COMPOSE_FILE logs --tail=5
+                  EOF
+
     # Notification
     notify:
         needs: [deploy-application]
