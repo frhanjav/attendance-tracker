@@ -513,21 +513,21 @@ jobs:
                   echo "Running containers: $RUNNING_CONTAINERS/$TOTAL_CONTAINERS"
 
                   echo '🔍 Checking individual service status...'
-                  FAILED_SERVICES=()
-                  for service in $(docker-compose -f $COMPOSE_FILE ps --services); do
-                    STATUS=$(docker-compose -f $COMPOSE_FILE ps $service | tail -n +2 | awk '{print $4}' | head -1)
-                    if [[ "$STATUS" != "Up" ]]; then
-                      FAILED_SERVICES+=($service)
-                      echo "❌ Service $service is not running (Status: $STATUS)"
+                  FAILED_SERVICES=""
+                  for service in \$(docker-compose -f \$COMPOSE_FILE ps --services); do
+                    STATUS=\$(docker-compose -f \$COMPOSE_FILE ps \$service | tail -n +2 | awk '{print \$4}' | head -1)
+                    if [[ "\$STATUS" != "Up" ]]; then
+                      FAILED_SERVICES="\$FAILED_SERVICES \$service"
+                      echo "❌ Service \$service is not running (Status: \$STATUS)"
                     else
-                      echo "✅ Service $service is running"
+                      echo "✅ Service \$service is running"
                     fi
                   done
 
-                  if [ ${#FAILED_SERVICES[@]} -gt 0 ]; then
+                  if [ -n "\$FAILED_SERVICES" ]; then
                     echo '❌ Some services are not running!'
-                    docker-compose -f $COMPOSE_FILE ps
-                    docker-compose -f $COMPOSE_FILE logs --tail=20
+                    docker-compose -f \$COMPOSE_FILE ps
+                    docker-compose -f \$COMPOSE_FILE logs --tail=20
                     exit 1
                   fi
 
@@ -535,19 +535,21 @@ jobs:
 
                   echo '🔍 Testing backend health endpoint...'
                   BACKEND_CONTAINER="attendance_backend_${{ env.ENVIRONMENT }}"
-                  for i in {1..10}; do
-                    if docker exec $BACKEND_CONTAINER wget -q --spider http://localhost:3000/api/v1/health 2>/dev/null; then
+                  i=1
+                  while [ \$i -le 10 ]; do
+                    if docker exec \$BACKEND_CONTAINER wget -q --spider http://localhost:3000/api/v1/health 2>/dev/null; then
                       echo '✅ Backend health check passed!'
                       break
                     else
-                      echo "⏳ Health check attempt $i/10..."
-                      if [ $i -eq 10 ]; then
+                      echo "⏳ Health check attempt \$i/10..."
+                      if [ \$i -eq 10 ]; then
                         echo '❌ Backend health check failed after 10 attempts!'
-                        docker logs $BACKEND_CONTAINER --tail=20
+                        docker logs \$BACKEND_CONTAINER --tail=20
                         exit 1
                       fi
                       sleep 5
                     fi
+                    i=\$((i + 1))
                   done
 
                   echo '🧹 Cleaning up old Docker images...'
