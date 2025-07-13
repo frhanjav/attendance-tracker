@@ -245,7 +245,6 @@ jobs:
 
                   echo "image=$IMAGE_TAG" >> $GITHUB_OUTPUT
 
-    # Deploy with Docker Compose (skipping Terraform - manage infrastructure manually)
     deploy-application:
         needs: [detect-changes, build-and-push]
         if: always() && needs.detect-changes.outputs.should-deploy == 'true' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') && (needs.build-and-push.result == 'success' || needs.build-and-push.result == 'skipped')
@@ -508,32 +507,52 @@ jobs:
                   sleep 30
 
                   echo '🔍 Verifying container health...'
-                  TOTAL_CONTAINERS=\$(docker-compose -f $COMPOSE_FILE ps --services | wc -l | tr -d ' ')
-                  RUNNING_COUNT=0
+                  FAILED_SERVICES=""
 
-                  echo '🔍 Checking individual service status...'
-                  FAILED_SERVICES=\"\"
-                  for service in \$(docker-compose -f $COMPOSE_FILE ps --services); do
-                    STATUS=\$(docker-compose -f $COMPOSE_FILE ps \$service | tail -n +2 | awk '{print \$4}' | head -1)
-                    if echo \"\$STATUS\" | grep -q \"Up\"; then
-                      RUNNING_COUNT=\$((RUNNING_COUNT + 1))
-                      echo \"✅ Service \$service is running\"
+                  for service in $(docker-compose -f $COMPOSE_FILE ps --services); do
+                    CONTAINER_ID=$(docker-compose -f $COMPOSE_FILE ps -q $service)
+                    
+                    # Check if container ID was found
+                    if [[ -z "$CONTAINER_ID" ]]; then
+                      echo "❌ Service $service - No container found"
+                      FAILED_SERVICES="$FAILED_SERVICES $service"
+                      continue
+                    fi
+                    
+                    # Get container status
+                    STATUS=$(docker inspect -f '{{.State.Status}}' $CONTAINER_ID 2>/dev/null || echo "unknown")
+                    
+                    # Get health status (if healthcheck is defined)
+                    HEALTH=$(docker inspect -f '{{.State.Health.Status}}' $CONTAINER_ID 2>/dev/null || echo "none")
+                    
+                    echo "🔍 Service $service - Status: $STATUS, Health: $HEALTH"
+                    
+                    # Check if service is healthy
+                    if [[ "$STATUS" != "running" ]]; then
+                      echo "❌ Service $service is not running (Status: $STATUS)"
+                      FAILED_SERVICES="$FAILED_SERVICES $service"
+                    elif [[ "$HEALTH" == "unhealthy" ]]; then
+                      echo "❌ Service $service is unhealthy"
+                      FAILED_SERVICES="$FAILED_SERVICES $service"
                     else
-                      FAILED_SERVICES=\"\$FAILED_SERVICES \$service\"
-                      echo \"❌ Service \$service is not running (Status: \$STATUS)\"
+                      echo "✅ Service $service is healthy"
                     fi
                   done
 
-                  echo \"Running containers: \$RUNNING_COUNT/\$TOTAL_CONTAINERS\"
-
-                  if [ -n \"\$FAILED_SERVICES\" ]; then
-                    echo '❌ Some services are not running!'
+                  if [[ -n "$FAILED_SERVICES" ]]; then
+                    echo '❌ Some services are not running properly!'
+                    echo "Failed services:$FAILED_SERVICES"
+                    echo '📊 Current container status:'
                     docker-compose -f $COMPOSE_FILE ps
-                    docker-compose -f $COMPOSE_FILE logs --tail=20
+                    echo '📋 Recent logs from failed services:'
+                    for service in $FAILED_SERVICES; do
+                      echo "--- Logs for $service ---"
+                      docker-compose -f $COMPOSE_FILE logs --tail=10 $service
+                    done
                     exit 1
                   fi
 
-                  echo '✅ All services are running!'
+                  echo '✅ All services are running and healthy!'
 
                   echo '🔍 Testing backend health endpoint...'
                   BACKEND_CONTAINER=\"attendance_backend_${{ env.ENVIRONMENT }}\"
