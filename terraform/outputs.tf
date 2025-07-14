@@ -1,37 +1,21 @@
 # terraform/outputs.tf
 
-# Database outputs
-output "database_connection_name" {
-  description = "Cloud SQL connection name"
-  value       = google_sql_database_instance.postgres.connection_name
-}
-
-output "database_public_ip" {
-  description = "Database public IP address"
-  value       = google_sql_database_instance.postgres.public_ip_address
-}
-
-output "database_private_ip" {
-  description = "Database private IP address"
-  value       = google_sql_database_instance.postgres.private_ip_address
-}
-
 # Artifact Registry outputs
 output "docker_repository_url" {
   description = "Docker repository URL"
   value       = "${var.gcp_region}-docker.pkg.dev/${var.gcp_project_id}/${google_artifact_registry_repository.docker_repo.repository_id}"
 }
 
-# Secret Manager outputs
-output "db_secret_name" {
-  description = "Database connection string secret name"
-  value       = google_secret_manager_secret.db_connection_string.secret_id
+# Service Account outputs
+output "vm_service_account_email" {
+  description = "VM service account email"
+  value       = google_service_account.vm_service_account.email
 }
 
 # VM outputs (if created)
 output "vm_external_ip" {
-  description = "VM external IP address"
-  value       = var.create_vm_instance ? google_compute_instance.app_server[0].network_interface[0].access_config[0].nat_ip : null
+  description = "VM external IP address (static)"
+  value       = var.create_vm_instance ? google_compute_address.vm_static_ip[0].address : null
 }
 
 output "vm_internal_ip" {
@@ -39,36 +23,41 @@ output "vm_internal_ip" {
   value       = var.create_vm_instance ? google_compute_instance.app_server[0].network_interface[0].network_ip : null
 }
 
+output "vm_name" {
+  description = "VM instance name"
+  value       = var.create_vm_instance ? google_compute_instance.app_server[0].name : null
+}
+
 # Instructions for deployment
 output "deployment_instructions" {
   description = "Instructions for deploying the application"
-  value = <<-EOT
+  value       = <<-EOT
     
     🚀 Infrastructure Created Successfully!
     
     📋 Next Steps:
     
-    1. Update your docker-compose.prod.yml with the database connection:
-       DATABASE_URL: ${google_secret_manager_secret_version.db_connection_string.secret_data}
+    1. Add database URL to your GitHub Actions secrets:
+       - STAGING_DATABASE_URL (for staging environment)
+       - PRODUCTION_DATABASE_URL (for production environment)
     
-    2. Build and push your Docker images:
-       docker build -t ${var.gcp_region}-docker.pkg.dev/${var.gcp_project_id}/${google_artifact_registry_repository.docker_repo.repository_id}/attendance-tracker-backend:latest ./backend
-       docker build -t ${var.gcp_region}-docker.pkg.dev/${var.gcp_project_id}/${google_artifact_registry_repository.docker_repo.repository_id}/attendance-tracker-frontend:latest ./frontend
+    2. Use CI/CD pipeline for deployment:
+       - Push to 'develop' branch for staging deployment
+       - Push to 'main' branch for production deployment
        
-       gcloud auth configure-docker ${var.gcp_region}-docker.pkg.dev
-       docker push ${var.gcp_region}-docker.pkg.dev/${var.gcp_project_id}/${google_artifact_registry_repository.docker_repo.repository_id}/attendance-tracker-backend:latest
-       docker push ${var.gcp_region}-docker.pkg.dev/${var.gcp_project_id}/${google_artifact_registry_repository.docker_repo.repository_id}/attendance-tracker-frontend:latest
+       The pipeline will automatically:
+       - Build and push Docker images to: ${var.gcp_region}-docker.pkg.dev/${var.gcp_project_id}/${google_artifact_registry_repository.docker_repo.repository_id}
+       - Deploy to your VM using docker-compose
     
-    3. Deploy on your server:
-       docker-compose -f docker-compose.prod.yml pull
-       docker-compose -f docker-compose.prod.yml up -d
+    3. Manual deployment (if needed):
+       docker-compose -f docker-compose.staging.yml pull && docker-compose -f docker-compose.staging.yml up -d
     
     📊 Resources Created:
-    - Database: ${google_sql_database_instance.postgres.name}
     - Docker Registry: ${google_artifact_registry_repository.docker_repo.repository_id}
-    - Database Secret: ${google_secret_manager_secret.db_connection_string.secret_id}
+    - VM Service Account: ${google_service_account.vm_service_account.email}
     ${var.create_vm_instance ? "- VM Instance: ${google_compute_instance.app_server[0].name}" : ""}
+    - Database: Using Aiven PostgreSQL (managed via GitHub Actions secrets)
     
   EOT
-  sensitive = false
+  sensitive   = false
 }

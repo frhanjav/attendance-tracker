@@ -34,30 +34,11 @@ variable "gcp_zone" {
   default     = "asia-south1-a"
 }
 
-# Database Configuration
-variable "db_instance_tier" {
-  description = "Cloud SQL instance tier"
-  type        = string
-  default     = "db-f1-micro"
-}
-
-variable "db_username" {
-  description = "Database username"
-  type        = string
-  default     = "attendance_user"
-}
-
-variable "db_password" {
-  description = "Database password"
-  type        = string
-  sensitive   = true
-}
-
 # VM Configuration (optional - for hosting)
 variable "create_vm_instance" {
   description = "Whether to create a VM instance for hosting"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "vm_machine_type" {

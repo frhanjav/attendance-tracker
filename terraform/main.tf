@@ -1,7 +1,7 @@
 # terraform/main.tf
 terraform {
   required_version = ">= 1.6.0"
-  
+
   required_providers {
     google = {
       source  = "hashicorp/google"
@@ -9,9 +9,7 @@ terraform {
     }
   }
 
-  backend "gcs" {
-    # Configuration will be provided via backend.tfvars
-  }
+  # No backend configuration - this is a module
 }
 
 # Local values for common tags and configuration
@@ -37,61 +35,25 @@ resource "google_artifact_registry_repository" "docker_repo" {
   format        = "DOCKER"
 }
 
-# Create Cloud SQL PostgreSQL instance
-resource "google_sql_database_instance" "postgres" {
-  name             = "attendance-tracker-db-${var.environment}"
-  database_version = "POSTGRES_15"
-  region           = var.gcp_region
-  deletion_protection = false
-
-  settings {
-    tier = var.db_instance_tier
-    
-    backup_configuration {
-      enabled = true
-      point_in_time_recovery_enabled = true
-    }
-    
-    ip_configuration {
-      ipv4_enabled = true
-      authorized_networks {
-        name  = "allow-all-for-development"
-        value = "0.0.0.0/0"
-      }
-    }
-    
-    database_flags {
-      name  = "log_statement"
-      value = "all"
-    }
-  }
+# Create a service account for the VM instance
+resource "google_service_account" "vm_service_account" {
+  account_id   = "attendance-vm-${var.environment}"
+  display_name = "Attendance Tracker VM Service Account (${var.environment})"
+  description  = "Service account for attendance tracker VM to access GCP services"
 }
 
-# Create database
-resource "google_sql_database" "database" {
-  name     = "attendance_tracker"
-  instance = google_sql_database_instance.postgres.name
+# Grant necessary permissions to the service account
+resource "google_project_iam_member" "vm_artifact_registry_reader" {
+  project = var.gcp_project_id
+  role    = "roles/artifactregistry.reader"
+  member  = "serviceAccount:${google_service_account.vm_service_account.email}"
 }
 
-# Create database user
-resource "google_sql_user" "user" {
-  name     = var.db_username
-  instance = google_sql_database_instance.postgres.name
-  password = var.db_password
-}
-
-# Create Secret Manager secrets for sensitive data
-resource "google_secret_manager_secret" "db_connection_string" {
-  secret_id = "db-connection-string-${var.environment}"
-  
-  replication {
-    auto {}
-  }
-}
-
-resource "google_secret_manager_secret_version" "db_connection_string" {
-  secret = google_secret_manager_secret.db_connection_string.id
-  secret_data = "postgresql://${var.db_username}:${var.db_password}@${google_sql_database_instance.postgres.public_ip_address}:5432/${google_sql_database.database.name}"
+# Reserve a static external IP address
+resource "google_compute_address" "vm_static_ip" {
+  count  = var.create_vm_instance ? 1 : 0
+  name   = "attendance-tracker-${var.environment}-ip"
+  region = var.gcp_region
 }
 
 # Create a VM instance for hosting (optional - you might use your existing VM)
@@ -100,6 +62,20 @@ resource "google_compute_instance" "app_server" {
   name         = "attendance-tracker-${var.environment}"
   machine_type = var.vm_machine_type
   zone         = var.gcp_zone
+
+  # Allow stopping for updates (needed when changing service account)
+  allow_stopping_for_update = true
+
+  # Attach the service account to the VM
+  service_account {
+    email  = google_service_account.vm_service_account.email
+    scopes = [
+      "https://www.googleapis.com/auth/cloud-platform",
+      "https://www.googleapis.com/auth/devstorage.read_only",
+      "https://www.googleapis.com/auth/logging.write",
+      "https://www.googleapis.com/auth/monitoring.write"
+    ]
+  }
 
   boot_disk {
     initialize_params {
@@ -111,7 +87,7 @@ resource "google_compute_instance" "app_server" {
   network_interface {
     network = "default"
     access_config {
-      // Ephemeral public IP
+      nat_ip = var.create_vm_instance ? google_compute_address.vm_static_ip[0].address : null
     }
   }
 
