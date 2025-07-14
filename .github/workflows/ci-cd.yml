@@ -413,6 +413,7 @@ jobs:
                   echo "SERVER_HOST=$SERVER_HOST" >> $GITHUB_ENV
                   echo "SERVER_USER=$SERVER_USER" >> $GITHUB_ENV
                   echo "DOMAIN=$DOMAIN" >> $GITHUB_ENV
+                  echo "GCP_REGION=${{ env.GCP_REGION }}" >> $GITHUB_ENV
 
             - name: Deploy to Server
               run: |
@@ -461,6 +462,7 @@ jobs:
 
                   # Execute deployment commands on the server
                   echo "🔍 Executing deployment..."
+                  GCP_REGION="${{ env.GCP_REGION }}"
                   ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_HOST} <<EOF
                   set -e
 
@@ -483,7 +485,10 @@ jobs:
 
                   echo '🐳 Checking Docker and Docker Compose...'
                   docker --version
-                  docker-compose version
+                  docker-compose --version
+
+                  echo '🔑 Configuring Docker authentication...'
+                  gcloud auth configure-docker $GCP_REGION-docker.pkg.dev --quiet
 
                   echo '📦 Pulling latest Docker images...'
                   if ! docker-compose -f $COMPOSE_FILE pull; then
