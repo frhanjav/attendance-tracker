@@ -5,6 +5,7 @@
 
 secrets.yaml
 
+tfplan
 *.tfstate
 *.tfstate.*
 *.tfvars
@@ -40,3 +41,6 @@ dist
 coverage
 
 *.sh
+
+package.json.*
+!package.json 
