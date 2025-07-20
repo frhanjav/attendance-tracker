@@ -51,7 +51,7 @@ export const TimetableBodySchema = z.object({
     return true;
 }, {
     message: "Valid until date must be on or after the valid from date",
-    path: ["validUntil"], // Path relative to the body object
+    path: ["validUntil"],
 });
 
 // --- Schema specifically for PARAMS (Example for create) ---
@@ -114,3 +114,11 @@ export const GetActiveTimetableSchema = z.object({
         date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, { message: "Invalid date format (YYYY-MM-DD)" }),
     }),
 });
+
+export const SetEndDateSchema = z.object({
+    body: z.object({
+        // Expect a YYYY-MM-DD string
+        validUntil: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, { message: "Invalid date format (YYYY-MM-DD)" }),
+    })
+});
+export type SetEndDateInput = z.infer<typeof SetEndDateSchema>['body'];

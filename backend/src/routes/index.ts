@@ -1,16 +1,17 @@
-import { Router, Request, Response, NextFunction } from 'express'; // Import NextFunction
-import passport from '../config/passport'; // Import configured passport
-import jwt from 'jsonwebtoken'; // To generate JWT after successful OAuth
-import { config } from '../config'; // For JWT secret/expiry
-import { User } from '@prisma/client'; // Import User type
+import { Router, Request, Response, NextFunction } from 'express';
+import passport from '../config/passport';
+import jwt from 'jsonwebtoken';
+import { config } from '../config';
+import { User } from '@prisma/client';
 import { userController } from '../domains/user/user.controller';
-import { streamController } from '../domains/stream/stream.controller'; // Assuming these exist
-import { timetableController } from '../domains/timetable/timetable.controller'; // Assuming these exist
-import { attendanceController } from '../domains/attendance/attendance.controller'; // Assuming these exist
-import { analyticsController } from '../domains/analytics/analytics.controller'; // Assuming these exist
+import { streamController } from '../domains/stream/stream.controller';
+import { timetableController } from '../domains/timetable/timetable.controller';
+import { attendanceController } from '../domains/attendance/attendance.controller';
+import { analyticsController } from '../domains/analytics/analytics.controller';
 import { validateRequest } from '../middleware/validation.middleware';
 import { protect } from '../middleware/auth.middleware';
-import { z } from 'zod'; // Import Zod for schema validation
+import { z } from 'zod';
+import { SetEndDateSchema } from '../domains/timetable/timetable.dto';
 
 // Import DTOs/Schemas for validation
 import { CreateStreamSchema, JoinStreamSchema } from '../domains/stream/stream.dto';
@@ -255,5 +256,11 @@ router.post(
 // router.all('*', (req, res, next) => {
 //   next(new NotFoundError(`API route not found: ${req.method} ${req.originalUrl}`));
 // });
+
+router.patch(
+    '/timetables/:timetableId/set-end-date',
+    validateRequest(z.object({ params: TimetableIdParamsSchema, body: SetEndDateSchema.shape.body })),
+    timetableController.handleSetTimetableEndDate
+);
 
 export default router;

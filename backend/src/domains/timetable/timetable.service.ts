@@ -16,8 +16,9 @@ import {
     getDaysInInterval,
     isDateInTimetableRange,
 } from '../../core/utils';
-import { parseISO } from 'date-fns'; // Import parseISO
+import { parseISO, isBefore } from 'date-fns';
 import prisma from '../../infrastructure/prisma';
+import { SetEndDateInput } from './timetable.dto';
 
 // --- Helper Types ---
 type FlatTimetableEntryInput = Omit<TimetableEntry, 'id' | 'timetableId'>;
@@ -172,18 +173,24 @@ export const timetableService = {
         // const cancelledKeys = new Set(cancellations.map(c => `${formatDate(c.classDate)}_${c.subjectName}`)); // Create lookup set
 
         // --- 2. Fetch the Set of cancelled class keys for the week ONCE ---
-        const cancelledKeys = await attendanceRepository.getCancelledClassKeys(streamId, startDate, endDate);
+        const cancelledKeys = await attendanceRepository.getCancelledClassKeys(
+            streamId,
+            startDate,
+            endDate,
+        );
         console.log(`[Timetable Service BE] Cancelled Keys for week:`, cancelledKeys); // Log fetched keys
         // ---
 
         const days = getDaysInInterval(startDate, endDate);
         for (const day of days) {
-            const activeTimetable = potentiallyActiveTimetables.find(tt => isDateInTimetableRange(day, tt.validFrom, tt.validUntil));
+            const activeTimetable = potentiallyActiveTimetables.find((tt) =>
+                isDateInTimetableRange(day, tt.validFrom, tt.validUntil),
+            );
             if (activeTimetable) {
                 const dayOfWeek = getISODayOfWeek(day);
                 activeTimetable.entries
-                    .filter(entry => entry.dayOfWeek === dayOfWeek)
-                    .forEach(entry => {
+                    .filter((entry) => entry.dayOfWeek === dayOfWeek)
+                    .forEach((entry) => {
                         const dateStr = formatDate(day);
                         // --- 3. Check if this specific instance is in the cancelled set ---
                         const cancellationKey = `${dateStr}_${entry.subjectName}`;
@@ -226,7 +233,6 @@ export const timetableService = {
         );
 
         if (!activeTimetable) {
-            // It's not an error to have no active timetable, just return null
             return null;
         }
 
@@ -286,5 +292,35 @@ export const timetableService = {
         // Check if user is member of the stream this timetable belongs to
         await streamService.ensureMemberAccess(timetable.streamId, userId);
         return mapTimetableToOutput(timetable);
+    },
+
+    async setTimetableEndDate(
+        timetableId: string,
+        input: SetEndDateInput,
+        adminUserId: string,
+    ): Promise<TimetableOutput> {
+        const timetable = await timetableRepository.findById(timetableId);
+        if (!timetable) {
+            throw new NotFoundError('Timetable not found.');
+        }
+
+        // Check permissions: only admin of the stream can set end date
+        await streamService.ensureAdminAccess(timetable.streamId, adminUserId);
+
+        const endDate = normalizeDate(input.validUntil);
+        // Business rule: End date cannot be before start date
+        if (isBefore(endDate, timetable.validFrom)) {
+            throw new BadRequestError(
+                "End date cannot be earlier than the timetable's start date.",
+            );
+        }
+
+        const updatedTimetable = await timetableRepository.setEndDate(timetableId, endDate);
+        // Need to get entries again as .update doesn't return relations by default
+        const finalTimetable = await timetableRepository.findById(timetableId);
+
+        if (!finalTimetable) throw new NotFoundError('Failed to retrieve updated timetable.'); // Should not happen
+
+        return mapTimetableToOutput(finalTimetable);
     },
 };

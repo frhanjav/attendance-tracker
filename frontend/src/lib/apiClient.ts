@@ -1,4 +1,3 @@
-// frontend/src/lib/apiClient.ts
 import axios, { AxiosError } from 'axios';
 import { config } from '../config';
 import toast from 'react-hot-toast'; // Keep for potential global error messages
@@ -17,11 +16,6 @@ const apiClient = axios.create({
   withCredentials: true,      // IMPORTANT: Allows browser to send cookies
   timeout: 15000,             // Increased timeout (e.g., 15 seconds)
 });
-
-// --- REMOVED Request Interceptor ---
-// The browser handles sending the HttpOnly cookie automatically
-// apiClient.interceptors.request.use( ... );
-// ---
 
 // --- Enhanced Response Interceptor (Keep this) ---
 apiClient.interceptors.response.use(

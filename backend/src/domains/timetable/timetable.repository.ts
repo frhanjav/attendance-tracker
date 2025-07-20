@@ -5,7 +5,7 @@ import { normalizeDate } from '../../core/utils';
 type TimetableEntryCreateInput = Omit<TimetableEntry, 'id' | 'timetableId'>;
 
 export const timetableRepository = {
-    // --- CREATE (Remains largely the same) ---
+    // --- CREATE ---
     async create(
         streamId: string,
         name: string,
@@ -40,7 +40,7 @@ export const timetableRepository = {
         });
     },
 
-    // --- FIND BY ID (Remains the same) ---
+    // --- FIND BY ID ---
     async findById(timetableId: string): Promise<(Timetable & { entries: TimetableEntry[] }) | null> {
         return prisma.timetable.findUnique({
             where: { id: timetableId },
@@ -51,7 +51,7 @@ export const timetableRepository = {
     async findByStream(streamId: string): Promise<(Timetable & { entries: TimetableEntry[] })[]> {
         return prisma.timetable.findMany({
             where: { streamId },
-            include: { entries: true }, // Make sure to include entries
+            include: { entries: true },
             orderBy: { validFrom: 'desc' },
         });
     },
@@ -60,17 +60,17 @@ export const timetableRepository = {
      async findManyForStream(streamId: string): Promise<Pick<Timetable, 'id' | 'name' | 'validFrom' | 'validUntil'>[]> {
         return prisma.timetable.findMany({
             where: { streamId },
-            select: { // Select only needed fields for the list
+            select: {
                 id: true,
                 name: true,
                 validFrom: true,
                 validUntil: true,
             },
-            orderBy: { validFrom: 'desc' }, // Show newest first
+            orderBy: { validFrom: 'desc' },
         });
     },
 
-    // --- FIND ACTIVE (Remains the same, used by other services) ---
+    // --- FIND ACTIVE (used by other services) ---
     async findActiveByStreamAndDate(streamId: string, date: Date): Promise<(Timetable & { entries: TimetableEntry[] }) | null> {
         // ... (implementation remains the same) ...
          const normalizedTargetDate = normalizeDate(date);
@@ -87,7 +87,12 @@ export const timetableRepository = {
         return candidates.length > 0 ? candidates[0] : null;
     },
 
-    // --- REMOVED update method ---
-    // --- REMOVED deleteById method ---
-    // --- REMOVED getStreamIdForTimetable (no longer needed for update/delete permissions) ---
+    async setEndDate(timetableId: string, endDate: Date): Promise<Timetable> {
+        return prisma.timetable.update({
+            where: { id: timetableId },
+            data: {
+                validUntil: normalizeDate(endDate), // Use normalized date
+            },
+        });
+    }
 };

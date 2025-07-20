@@ -1,32 +1,12 @@
-// frontend/src/services/attendance.service.ts (Create or update)
 import apiClient from '../lib/apiClient';
 
 export enum AttendanceStatus {
     OCCURRED = 'OCCURRED',
     MISSED   = 'MISSED',
     CANCELLED = 'CANCELLED',
-  }
-  
+}
 
-// Define types matching backend DTOs
-
-// Type for calendar events expected by react-big-calendar
-// Match the CalendarEventOutputSchema from backend DTO
-// export interface CalendarEvent {
-//     title: string;
-//     start: Date; // Use Date objects on frontend
-//     end: Date;
-//     allDay?: boolean;
-//     resource?: { // Match backend resource structure
-//         recordId?: string;
-//         streamId: string;
-//         subjectName: string;
-//         courseCode?: string | null;
-//         status: AttendanceStatus; // Use the enum/string type
-//     };
-// }
-
-export interface WeeklyAttendanceViewEntry { // Export this type too
+export interface WeeklyAttendanceViewEntry {
     date: string; // YYYY-MM-DD
     dayOfWeek: number;
     subjectName: string;
@@ -37,7 +17,6 @@ export interface WeeklyAttendanceViewEntry { // Export this type too
     recordId?: string;
     isReplacement?: boolean;
     originalSubjectName?: string | null;
-    // isCancelled: boolean; // We can infer cancelled from status: AttendanceStatus.CANCELLED
 }
 
 // Input for marking attendance
@@ -45,24 +24,24 @@ export interface MarkAttendanceInput {
     streamId: string;
     subjectName: string;
     courseCode?: string | null;
-    classDate: string; // YYYY-MM-DD format
+    classDate: string;
     status: AttendanceStatus;
 }
 
 // Input for bulk attendance
 export interface BulkAttendanceInput {
     streamId: string;
-    startDate: string; // YYYY-MM-DD
-    endDate?: string; // YYYY-MM-DD
-    attendance: Record<string, number>; // { [subjectName]: attendedCount }
+    startDate: string;
+    endDate?: string;
+    attendance: Record<string, number>;
 }
 
 // Input type for cancelling class (sent TO backend)
 export interface CancelClassInput {
     streamId: string;
-    classDate: string; // YYYY-MM-DD
+    classDate: string;
     subjectName: string;
-    startTime?: string | null; // Optional identifier
+    startTime?: string | null;
 }
 
 // Input type for replacing class (sent TO backend)
@@ -91,29 +70,6 @@ export interface AttendanceRecordOutput {
     isReplacement?: boolean;
     originalSubjectName?: string | null;
 }
-
-// Type for the raw calendar event data received FROM backend API
-// Matches CalendarEventOutputSchema from backend DTO (dates are strings)
-// interface RawCalendarEvent {
-//   title: string;
-//   start: string; // ISO String from backend
-//   end: string;   // ISO String from backend
-//   allDay?: boolean;
-//   resource?: {
-//       recordId?: string;
-//       streamId: string;
-//       subjectName: string;
-//       courseCode?: string | null;
-//       status: AttendanceStatus; // Use the imported enum
-//   };
-// }
-
-// Response type for calendar data
-// interface CalendarDataResponse {
-//     status: string;
-//     results: number;
-//     data: { events: RawCalendarEvent[] }; // Backend should return dates as ISO strings
-// }
 
 // Expected API response structure for POST /attendance/mark
 interface MarkAttendanceResponse {

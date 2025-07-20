@@ -1,8 +1,6 @@
-// frontend/src/services/timetable.service.ts
 import apiClient from '../lib/apiClient';
 import { format, parseISO } from 'date-fns';
 
-// --- Exported Types for Frontend Usage ---
 
 export interface TimeSlotInput {
     dayOfWeek: number;
@@ -11,7 +9,7 @@ export interface TimeSlotInput {
 }
 
 export interface SubjectInput {
-    subjectName: string; // REQUIRED
+    subjectName: string;
     courseCode?: string;
     timeSlots: TimeSlotInput[];
 }
@@ -19,9 +17,13 @@ export interface SubjectInput {
 // Input type for create/update PAYLOAD SENT TO BACKEND SERVICE
 export interface CreateTimetableFrontendInput {
     name: string;
-    validFrom: string; // YYYY-MM-DD string
-    validUntil?: string | null; // YYYY-MM-DD string, empty string, or null
-    subjects: SubjectInput[]; // Use the SubjectInput type (subjectName is required)
+    validFrom: string;
+    validUntil?: string | null;
+    subjects: SubjectInput[];
+}
+
+export interface SetEndDateInput {
+    validUntil: string;
 }
 
 // Type for the full timetable object RETURNED FROM BACKEND API
@@ -60,7 +62,7 @@ export interface WeeklyScheduleEntry {
     courseCode: string | null;
     startTime: string | null;
     endTime: string | null;
-    status: 'SCHEDULED' | 'CANCELLED'; // Global status from backend
+    status: 'SCHEDULED' | 'CANCELLED';
 }
 // --- End Exported Types ---
 
@@ -70,10 +72,6 @@ interface TimetableListResponse { status: string; results: number; data: { timet
 interface TimetableBasicListResponse { status: string; results: number; data: { timetables: TimetableBasicInfo[] }; }
 interface TimetableCreateResponse { status: string; data: { timetable: TimetableOutput }; }
 interface WeeklyScheduleResponse { status: string; data: { schedule: WeeklyScheduleEntry[] }; }
-
-
-// --- REMOVED CreateTimetableBackendPayload type ---
-// --- REMOVED transformSubjectsToEntries helper function ---
 
 
 // --- Service Object ---
@@ -162,6 +160,22 @@ export const timetableService = {
              }
              console.error(`Error fetching active timetable for stream ${streamId} on ${dateString}:`, error);
              throw new Error(error.message || 'Failed to fetch active timetable');
+        }
+    },
+
+    setEndDate: async (timetableId: string, data: SetEndDateInput): Promise<TimetableOutput> => {
+        try {
+            const response = await apiClient.patch<{ status: string, data: { timetable: TimetableOutput } }>(
+                `/timetables/${timetableId}/set-end-date`,
+                data
+            );
+            if (response.data?.status !== 'success' || !response.data?.data?.timetable) {
+                throw new Error("Invalid API response when setting end date.");
+            }
+            return response.data.data.timetable;
+        } catch (error: any) {
+            console.error(`Error setting end date for timetable ${timetableId}:`, error);
+            throw new Error(error.message || 'Failed to set end date');
         }
     },
 };

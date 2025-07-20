@@ -4,6 +4,7 @@ import { CreateTimetableFrontendInput } from './timetable.dto';
 import { ParsedQs } from 'qs'; // For typed query params
 import { z } from 'zod'; // Import Zod if needed
 import { AuthenticatedUser } from '@/middleware/auth.middleware';
+import { SetEndDateInput } from './timetable.dto';
 
 // Define schema for weekly schedule query params if not using validateRequest middleware
 const weeklyScheduleQuerySchema = z.object({
@@ -121,4 +122,16 @@ export const timetableController = {
             next(error);
         }
     },
+
+    // --- Handler to set timetable end date ---
+    async handleSetTimetableEndDate(req: Request<{ timetableId: string }, {}, SetEndDateInput>, res: Response, next: NextFunction) {
+        try {
+            const user = req.user as AuthenticatedUser;
+            if (!user?.id) throw new Error("Authentication error");
+            const updatedTimetable = await timetableService.setTimetableEndDate(req.params.timetableId, req.body, user.id);
+            res.status(200).json({ status: 'success', data: { timetable: updatedTimetable } });
+        } catch (error) {
+            next(error);
+        }
+    }
 };
