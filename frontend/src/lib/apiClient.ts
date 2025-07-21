@@ -14,7 +14,7 @@ export interface ApiError {
 const apiClient = axios.create({
   baseURL: config.apiBaseUrl, // e.g., http://localhost:3001/api/v1
   withCredentials: true,      // IMPORTANT: Allows browser to send cookies
-  timeout: 15000,             // Increased timeout (e.g., 15 seconds)
+  timeout: 30000,             // Increased timeout (e.g., 15 seconds)
 });
 
 // --- Enhanced Response Interceptor (Keep this) ---
