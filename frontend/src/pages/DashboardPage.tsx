@@ -38,7 +38,6 @@ const DashboardPage: React.FC = () => {
             <div className="flex flex-col sm:flex-row justify-between items-center gap-3">
                 <h1 className="text-3xl font-bold text-gray-800">Dashboard</h1>
                 <div className="flex items-center space-x-2 sm:space-x-3">
-                    {/* --- NEW: Show Archived Toggle --- */}
                     <div className="flex items-center space-x-1.5 border p-1.5 rounded-md bg-gray-50 shadow-sm">
                         <Switch
                             id="dashboard-show-archived"
@@ -76,7 +75,6 @@ const DashboardPage: React.FC = () => {
                 </div>
             </div>
 
-            {/* Stream Cards Grid */}
             <div>
                 <h2 className="text-xl font-semibold text-gray-700 mb-4">
                     {showArchived ? 'Archived Streams' : 'My Active Streams'}
@@ -100,7 +98,7 @@ const DashboardPage: React.FC = () => {
                                     <Card
                                         key={stream.id}
                                         className={`shadow-md hover:shadow-lg transition-shadow flex flex-col ${
-                                            stream.isArchived ? 'opacity-70 bg-gray-50' : '' // Optional: Style archived cards differently
+                                            stream.isArchived ? 'opacity-70 bg-gray-50' : ''
                                         }`}
                                     >
                                         <CardHeader className="pb-4">

@@ -1,8 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { timetableService } from './timetable.service';
 import { CreateTimetableFrontendInput } from './timetable.dto';
-import { ParsedQs } from 'qs'; // For typed query params
-import { z } from 'zod'; // Import Zod if needed
+import { ParsedQs } from 'qs';
+import { z } from 'zod';
 import { AuthenticatedUser } from '@/middleware/auth.middleware';
 import { SetEndDateInput } from './timetable.dto';
 
@@ -13,7 +13,7 @@ const weeklyScheduleQuerySchema = z.object({
 });
 
 export const timetableController = {
-    // --- Create Timetable (Uses new schema/service input) ---
+    // --- Create Timetable ---
     async handleCreateTimetable(req: Request<{ streamId: string }, {}, CreateTimetableFrontendInput>, res: Response, next: NextFunction) {
         try {
             const user = req.user as AuthenticatedUser;
@@ -74,7 +74,7 @@ export const timetableController = {
         }
     },
 
-    // --- NEW: Get Timetable Details ---
+    // --- Get Timetable Details ---
     async handleGetTimetableDetails(req: Request<{ timetableId: string }>, res: Response, next: NextFunction) {
         try {
             const user = req.user as AuthenticatedUser;
@@ -88,7 +88,7 @@ export const timetableController = {
         }
     },
 
-    // --- NEW: Get Timetable List for Import ---
+    // --- Get Timetable List for Import ---
     async handleGetTimetableListForImport(req: Request<{ streamId: string }>, res: Response, next: NextFunction) {
         try {
             const user = req.user as AuthenticatedUser;
@@ -102,7 +102,7 @@ export const timetableController = {
         }
     },
 
-    // --- NEW: Get Weekly Schedule View ---
+    // --- Get Weekly Schedule View ---
     async handleGetWeeklySchedule(
         req: Request<{ streamId: string }, {}, {}, { startDate?: string, endDate?: string } & ParsedQs>,
         res: Response,

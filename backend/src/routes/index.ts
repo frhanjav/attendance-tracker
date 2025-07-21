@@ -12,15 +12,12 @@ import { validateRequest } from '../middleware/validation.middleware';
 import { protect } from '../middleware/auth.middleware';
 import { z } from 'zod';
 import { SetEndDateSchema } from '../domains/timetable/timetable.dto';
-
-// Import DTOs/Schemas for validation
 import { CreateStreamSchema, JoinStreamSchema } from '../domains/stream/stream.dto';
 import {
     TimetableBodySchema,
     TimetableStreamParamsSchema,
     TimetableIdParamsSchema,
     TimetableActiveQuerySchema,
-    GetActiveTimetableSchema,
 } from '../domains/timetable/timetable.dto';
 import {
     MarkAttendanceSchema,
@@ -28,7 +25,7 @@ import {
     CancelClassSchema,
     ReplaceClassSchema,
 } from '../domains/attendance/attendance.dto';
-import { AttendanceCalculatorInputSchema } from '../domains/analytics/analytics.dto'; // Add GetAnalyticsSchema if using validation middleware
+import { AttendanceCalculatorInputSchema } from '../domains/analytics/analytics.dto';
 
 const router = Router();
 
@@ -50,10 +47,9 @@ router.get('/auth/google/callback', (req, res, next) => {
     // Add logging
     console.log('Backend: Handling GET /auth/google/callback - invoking passport.authenticate');
     passport.authenticate('google', {
-        failureRedirect: `${config.frontendUrl}/landing?error=google-auth-failed`, // Use landing page
+        failureRedirect: `${config.frontendUrl}/landing?error=google-auth-failed`,
         session: false,
     })(req, res, (err?: any) => {
-        // Handle potential passport errors explicitly
         console.log(
             '[Auth Callback] passport.authenticate finished. Error:',
             err,
@@ -62,12 +58,11 @@ router.get('/auth/google/callback', (req, res, next) => {
         );
         if (err) {
             return next(err);
-        } // Pass passport errors to global handler
+        }
         if (!req.user) {
             console.error('[Auth Callback] req.user missing after successful Google auth!');
             return res.redirect(`${config.frontendUrl}/landing?error=auth-callback-user-missing`);
         }
-        // --- Custom Callback Logic ---
         try {
             const user = req.user as User;
             const payload = { id: user.id };
@@ -91,7 +86,7 @@ router.get('/auth/google/callback', (req, res, next) => {
     });
 });
 
-// --- NEW: Logout Route ---
+// --- Logout Route ---
 router.post('/auth/logout', (req: Request, res: Response, next: NextFunction) => {
     console.log('[Auth Logout] Received logout request');
     try {
@@ -110,7 +105,6 @@ router.post('/auth/logout', (req: Request, res: Response, next: NextFunction) =>
         next(error);
     }
 });
-// --- End Logout Route ---
 
 // --- Protected Routes (Require Authentication) ---
 router.use(protect); // Apply auth middleware to all subsequent routes
@@ -120,7 +114,7 @@ router.get('/users/me', userController.getMe);
 
 // --- Stream Routes ---
 router.post('/streams', validateRequest(CreateStreamSchema), streamController.handleCreateStream);
-router.get('/streams', streamController.handleGetMyStreams); // Get streams the user is a member of
+router.get('/streams', streamController.handleGetMyStreams);
 router.post('/streams/join', validateRequest(JoinStreamSchema), streamController.handleJoinStream);
 router.get(
     '/streams/:streamId',
@@ -135,27 +129,25 @@ router.post('/streams/:streamId/unarchive', validateRequest(z.object({ params: T
 
 // Create Timetable
 router.post(
-    // Create
     '/streams/:streamId/timetables',
     validateRequest(z.object({ params: TimetableStreamParamsSchema, body: TimetableBodySchema })),
     timetableController.handleCreateTimetable,
 );
 
-// Get List (only needs params validation if you add it)
+// Get List
 router.get(
-    // Get List for a Stream (used on TimetablePage)
     '/streams/:streamId/timetables',
-    validateRequest(z.object({ params: TimetableStreamParamsSchema })), // Validate param
+    validateRequest(z.object({ params: TimetableStreamParamsSchema })),
     timetableController.handleGetTimetables,
 );
 
-// NEW: Get List for Import Dropdown
+// Get List for Import Dropdown
 router.get(
-    '/timetables/list/:streamId', // New route distinct from the main list maybe?
+    '/timetables/list/:streamId',
     validateRequest(z.object({ params: TimetableStreamParamsSchema })),
     timetableController.handleGetTimetableListForImport,
 );
-// NEW: Get Weekly Schedule View
+// Get Weekly Schedule View
 router.get(
     '/timetables/weekly/:streamId',
     validateRequest(
@@ -174,18 +166,17 @@ router.get(
     '/streams/:streamId/timetables/active',
     validateRequest(
         z.object({
-            // Combine validation for params and query
             params: TimetableStreamParamsSchema,
             query: TimetableActiveQuerySchema,
         }),
     ),
-    timetableController.handleGetActiveTimetable, // Ensure this controller exists and works
+    timetableController.handleGetActiveTimetable,
 );
 
 // Get Details
 router.get(
     '/timetables/:timetableId',
-    validateRequest(z.object({ params: TimetableIdParamsSchema })), // Validate timetableId in params
+    validateRequest(z.object({ params: TimetableIdParamsSchema })),
     timetableController.handleGetTimetableDetails,
 );
 
@@ -202,17 +193,17 @@ router.post(
     validateRequest(BulkAttendanceSchema),
     attendanceController.handleRecordBulkAttendance,
 );
-// NEW: Cancel Class (Admin)
+// Cancel Class (Admin)
 router.post(
     '/attendance/cancel',
     validateRequest(CancelClassSchema),
     attendanceController.handleCancelClassGlobally,
 ); // Added validation
 
-// NEW: Replace Class Route (Admin)
+// Replace Class Route (Admin)
 router.post('/attendance/replace', validateRequest(ReplaceClassSchema), attendanceController.handleReplaceClassGlobally);
 
-// NEW: Get Weekly Attendance View (Student)
+// Get Weekly Attendance View (Student)
 router.get(
     '/attendance/weekly/:streamId',
     validateRequest(
@@ -227,21 +218,13 @@ router.get(
     attendanceController.handleGetWeeklyAttendanceView,
 );
 
-// router.get(
-//     '/attendance/records',
-//     validateRequest(GetAttendanceRecordsSchema),
-//     attendanceController.handleGetAttendanceRecords,
-// ); // Get attendance records (defaults to self, admins might query others)
-
 // --- Analytics Routes ---
 router.get(
     // Get Stream Stats
     '/analytics/streams/:streamId',
-    validateRequest(z.object({ params: TimetableStreamParamsSchema })), // Validate param
+    validateRequest(z.object({ params: TimetableStreamParamsSchema })),
     analyticsController.handleGetStreamAnalytics,
 );
-
-// router.get('/analytics/streams/:streamId/subjects', validateRequest(GetAnalyticsSchema), analyticsController.handleGetSubjectAnalytics); // Get subject stats (defaults to self)
 
 router.post(
     // Calculator
@@ -249,13 +232,6 @@ router.post(
     validateRequest(AttendanceCalculatorInputSchema),
     analyticsController.handleCalculateProjection,
 );
-
-// --- Catch-all for undefined API routes ---
-// Placed after all defined API routes within the /api/v1 prefix
-// Note: The global catch-all in server.ts handles non-API routes
-// router.all('*', (req, res, next) => {
-//   next(new NotFoundError(`API route not found: ${req.method} ${req.originalUrl}`));
-// });
 
 router.patch(
     '/timetables/:timetableId/set-end-date',

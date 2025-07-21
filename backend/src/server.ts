@@ -1,13 +1,13 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
-import helmet from 'helmet'; // Import helmet
+import helmet from 'helmet';
 import cors from 'cors';
 import session from 'express-session';
-import passport from './config/passport'; // Import configured passport
-import cookieParser from 'cookie-parser'; // Import cookie-parser
+import passport from './config/passport';
+import cookieParser from 'cookie-parser';
 import { config } from './config';
-import apiRouter from './routes'; // Your main API router
+import apiRouter from './routes';
 import { errorHandler } from './middleware/error.middleware';
-import { AppError, NotFoundError } from './core/errors'; // Assuming AppError exists
+import { NotFoundError } from './core/errors';
 
 // Install: npm install express-session @types/express-session cookie-parser @types/cookie-parser
 // Optional production session store: npm install connect-pg-simple
@@ -149,4 +149,4 @@ process.on('SIGTERM', () => {
   });
 });
 
-export default app; // Export for testing or other purposes
+export default app;
