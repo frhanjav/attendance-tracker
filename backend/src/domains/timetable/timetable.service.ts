@@ -13,12 +13,15 @@ import {
     normalizeDate,
     getISODayOfWeek,
     getDaysInInterval,
+    isDateInTimetableRange
 } from '../../core/utils';
-import { isBefore, isAfter } from 'date-fns';
+import { isBefore, isAfter, addDays } from 'date-fns';
 import prisma from '../../infrastructure/prisma';
 import { SetEndDateInput } from './timetable.dto';
 
 type FlatTimetableEntryInput = Omit<TimetableEntry, 'id' | 'timetableId'>;
+
+type TimetableWithEntries = Timetable & { entries: TimetableEntry[] };
 
 const mapEntryToOutput = (entry: TimetableEntry): TimetableEntryOutput => ({
     id: entry.id,
@@ -209,18 +212,40 @@ export const timetableService = {
     ): Promise<Record<string, number>> {
         await streamService.ensureMemberAccess(streamId, userId);
 
+        const potentiallyActiveTimetables: TimetableWithEntries[] = await prisma.timetable.findMany({
+             where: {
+                 streamId: streamId,
+                 validFrom: { lte: endDate },
+                 OR: [
+                     { validUntil: null },
+                     { validUntil: { gte: startDate } }
+                 ]
+             },
+             include: { entries: true },
+             orderBy: { validFrom: 'desc' }
+        });
+
+        if (potentiallyActiveTimetables.length === 0) {
+            return {};
+        }
+
         const scheduledCounts: Record<string, number> = {};
         const days = getDaysInInterval(startDate, endDate);
         for (const day of days) {
-            const activeTimetable = await timetableRepository.findActiveByStreamAndDate(streamId, day);
+            const activeTimetable = potentiallyActiveTimetables.find(tt =>
+                isBefore(tt.validFrom, addDays(day, 1)) &&
+                (tt.validUntil === null || isAfter(tt.validUntil, addDays(day, -1)))
+            );
+
             if (activeTimetable) {
-                const dayOfWeek = getISODayOfWeek(day);
-                activeTimetable.entries
-                    .filter((entry) => entry.dayOfWeek === dayOfWeek)
-                    .forEach((entry) => {
-                        scheduledCounts[entry.subjectName] =
-                            (scheduledCounts[entry.subjectName] || 0) + 1;
-                    });
+                if (isDateInTimetableRange(day, activeTimetable.validFrom, activeTimetable.validUntil)) {
+                    const dayOfWeek = getISODayOfWeek(day);
+                    activeTimetable.entries
+                        .filter(entry => entry.dayOfWeek === dayOfWeek)
+                        .forEach(entry => {
+                            scheduledCounts[entry.subjectName] = (scheduledCounts[entry.subjectName] || 0) + 1;
+                        });
+                }
             }
         }
         console.log(`[Timetable Service BE] Analytics scheduled counts calculated.`);
