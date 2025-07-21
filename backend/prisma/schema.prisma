@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -41,7 +38,7 @@ model User {
 model Stream {
   id         String   @id @default(cuid())
   name       String
-  streamCode String   @unique @default(cuid()) // Simple unique code for joining
+  streamCode String   @unique @default(cuid())
   ownerId    String
   isArchived Boolean  @default(false)
   createdAt  DateTime @default(now())
@@ -50,8 +47,6 @@ model Stream {
   owner             User                  @relation("StreamOwner", fields: [ownerId], references: [id])
   members           StreamMembership[]
   timetables        Timetable[]
-  // Link global statuses here if needed, or handle via AttendanceRecord
-  // cancelledClasses CancelledClass[] // Example if storing cancellations separately
   attendanceRecords AttendanceRecord[]
   bulkEntries       BulkAttendanceEntry[]
   classOverrides    ClassOverride[]
@@ -65,7 +60,7 @@ model StreamMembership {
   id       String   @id @default(cuid())
   userId   String
   streamId String
-  role     String   @default("member") // e.g., "admin", "member"
+  role     String   @default("member")
   joinedAt DateTime @default(now())
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -80,26 +75,23 @@ model StreamMembership {
 model ClassOverride {
   id                  String   @id @default(cuid())
   streamId            String
-  classDate           DateTime // Date of the original class
+  classDate           DateTime
   originalSubjectName String
   originalStartTime   String? // Optional: To identify specific slot if multiple per day
-  // originalEndTime String?     // Optional
 
   overrideType OverrideType // CANCELLED or REPLACED
 
-  // Fields for REPLACED type
   replacementSubjectName String?
   replacementCourseCode  String?
   replacementStartTime   String?
   replacementEndTime     String?
 
-  adminUserId String // Who made the override
+  adminUserId String
   createdAt   DateTime @default(now())
 
   stream    Stream @relation(fields: [streamId], references: [id], onDelete: Cascade)
   adminUser User   @relation(fields: [adminUserId], references: [id])
 
-  // Ensure only one override exists for a specific class instance
   @@unique([streamId, classDate, originalSubjectName])
   @@index([streamId, classDate])
 }
@@ -107,9 +99,9 @@ model ClassOverride {
 model Timetable {
   id         String    @id @default(cuid())
   streamId   String
-  name       String // e.g., "Semester 1 Timetable"
-  validFrom  DateTime // Start date this timetable is active
-  validUntil DateTime? // Optional end date
+  name       String
+  validFrom  DateTime
+  validUntil DateTime?
   createdAt  DateTime  @default(now())
 
   stream  Stream           @relation(fields: [streamId], references: [id], onDelete: Cascade)
@@ -122,11 +114,11 @@ model Timetable {
 model TimetableEntry {
   id          String  @id @default(cuid())
   timetableId String
-  dayOfWeek   Int // ISO 8601 day of week (1 = Monday, 7 = Sunday)
+  dayOfWeek   Int
   subjectName String
   courseCode  String?
-  startTime   String? // Optional: e.g., "09:00"
-  endTime     String? // Optional: e.g., "10:00"
+  startTime   String?
+  endTime     String?
 
   timetable Timetable @relation(fields: [timetableId], references: [id], onDelete: Cascade)
 
@@ -134,19 +126,15 @@ model TimetableEntry {
   @@index([dayOfWeek])
 }
 
-// Represents a specific class instance on a specific date, derived from TimetableEntry
-// Could be implicitly calculated or explicitly stored if needed for complex overrides/notes
-// For simplicity here, we link AttendanceRecord directly to Stream/Subject/Date
-
 model AttendanceRecord {
   id          String           @id @default(cuid())
   userId      String
   streamId    String
   subjectName String
   courseCode  String?
-  classDate   DateTime // The specific date the class was scheduled/held
+  classDate   DateTime
   status      AttendanceStatus @default(MISSED)
-  markedAt    DateTime         @updatedAt // When the status was last changed
+  markedAt    DateTime         @updatedAt
 
   // Optional: Track who marked it if needed (e.g., distinguishing admin actions)
   // markedByUserId String?
@@ -170,19 +158,17 @@ model AttendanceRecord {
   @@index([isReplacement])
 }
 
-// For bulk entry feature
 model BulkAttendanceEntry {
   id               String   @id @default(cuid())
   userId           String
   streamId         String
   subjectName      String
   courseCode       String?
-  attendedClasses  Int // Number of classes attended by the user for this subject
-  // Store total held classes *at the time of calculation* based on new definition
+  attendedClasses  Int
   totalHeldClasses Int?
   calculationDate  DateTime @default(now()) // When this bulk entry was made/calculated
-  startDate        DateTime // Start date used for calculation
-  endDate          DateTime // End date used for calculation (usually current date)
+  startDate        DateTime
+  endDate          DateTime
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   stream Stream @relation(fields: [streamId], references: [id], onDelete: Cascade)
