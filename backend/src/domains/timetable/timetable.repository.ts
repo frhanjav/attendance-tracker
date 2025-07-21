@@ -1,11 +1,11 @@
 import prisma from '../../infrastructure/prisma';
-import { Prisma, Timetable, TimetableEntry } from '@prisma/client';
-import { normalizeDate } from '../../core/utils';
+import { Timetable, TimetableEntry } from '@prisma/client';
+import { isDateInTimetableRange, normalizeDate } from '../../core/utils';
+import { isAfter, isEqual } from 'date-fns';
 
 type TimetableEntryCreateInput = Omit<TimetableEntry, 'id' | 'timetableId'>;
 
 export const timetableRepository = {
-    // --- CREATE ---
     async create(
         streamId: string,
         name: string,
@@ -13,7 +13,6 @@ export const timetableRepository = {
         validUntil: Date | null,
         entriesData: TimetableEntryCreateInput[]
     ): Promise<Timetable & { entries: TimetableEntry[] }> {
-        // Use transaction to ensure timetable and entries are created together
         return prisma.$transaction(async (tx) => {
             const newTimetable = await tx.timetable.create({
                 data: {
@@ -28,11 +27,11 @@ export const timetableRepository = {
                 await tx.timetableEntry.createMany({
                     data: entriesData.map(entry => ({
                         ...entry,
-                        timetableId: newTimetable.id, // Link to the new timetable
+                        timetableId: newTimetable.id,
                     })),
                 });
             }
-            // Fetch again to include entries
+            
             return tx.timetable.findUniqueOrThrow({
                  where: { id: newTimetable.id },
                  include: { entries: true }
@@ -70,28 +69,38 @@ export const timetableRepository = {
         });
     },
 
-    // --- FIND ACTIVE (used by other services) ---
     async findActiveByStreamAndDate(streamId: string, date: Date): Promise<(Timetable & { entries: TimetableEntry[] }) | null> {
-        // ... (implementation remains the same) ...
-         const normalizedTargetDate = normalizeDate(date);
-        const candidates = await prisma.timetable.findMany({
+        const normalizedTargetDate = normalizeDate(date);
+        
+        const latestPossibleTimetable = await prisma.timetable.findFirst({
             where: {
                 streamId: streamId,
                 validFrom: { lte: normalizedTargetDate },
-                OR: [ { validUntil: null }, { validUntil: { gte: normalizedTargetDate } } ],
             },
             include: { entries: true },
             orderBy: { validFrom: 'desc' },
-            take: 1,
         });
-        return candidates.length > 0 ? candidates[0] : null;
+
+        if (!latestPossibleTimetable) {
+            return null;
+        }
+
+        if (
+            latestPossibleTimetable.validUntil === null ||
+            isAfter(latestPossibleTimetable.validUntil, normalizedTargetDate) ||
+            isEqual(latestPossibleTimetable.validUntil, normalizedTargetDate)
+        ) {
+            return latestPossibleTimetable;
+        }
+
+        return null;
     },
 
     async setEndDate(timetableId: string, endDate: Date): Promise<Timetable> {
         return prisma.timetable.update({
             where: { id: timetableId },
             data: {
-                validUntil: normalizeDate(endDate), // Use normalized date
+                validUntil: normalizeDate(endDate),
             },
         });
     }
