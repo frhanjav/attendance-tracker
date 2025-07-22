@@ -15,7 +15,7 @@ import {
     getDaysInInterval,
     isDateInTimetableRange
 } from '../../core/utils';
-import { isBefore, isAfter, addDays } from 'date-fns';
+import { isBefore, isAfter, addDays, isEqual } from 'date-fns';
 import prisma from '../../infrastructure/prisma';
 import { SetEndDateInput } from './timetable.dto';
 
@@ -232,15 +232,20 @@ export const timetableService = {
         const scheduledCounts: Record<string, number> = {};
         const days = getDaysInInterval(startDate, endDate);
         for (const day of days) {
-            const activeTimetable = potentiallyActiveTimetables.find(tt =>
-                isBefore(tt.validFrom, addDays(day, 1)) &&
-                (tt.validUntil === null || isAfter(tt.validUntil, addDays(day, -1)))
+            const latestPossibleTimetable = potentiallyActiveTimetables.find(tt =>
+                !isAfter(tt.validFrom, day)
             );
 
-            if (activeTimetable) {
-                if (isDateInTimetableRange(day, activeTimetable.validFrom, activeTimetable.validUntil)) {
+            if (latestPossibleTimetable) {
+                const isStillValid = (
+                    latestPossibleTimetable.validUntil === null ||
+                    isAfter(latestPossibleTimetable.validUntil, day) ||
+                    isEqual(latestPossibleTimetable.validUntil, day)
+                );
+
+                if (isStillValid) {
                     const dayOfWeek = getISODayOfWeek(day);
-                    activeTimetable.entries
+                    latestPossibleTimetable.entries
                         .filter(entry => entry.dayOfWeek === dayOfWeek)
                         .forEach(entry => {
                             scheduledCounts[entry.subjectName] = (scheduledCounts[entry.subjectName] || 0) + 1;
