@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { streamService } from '../../services/stream.service'; // Adjust import path
+import { streamService } from '../../services/stream.service';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
@@ -14,17 +14,14 @@ import {
     DialogTitle,
     DialogDescription,
     DialogFooter,
-    DialogClose,
 } from "../../components/ui/dialog";
 import toast from 'react-hot-toast';
 import { Loader2 } from 'lucide-react';
 
-// --- Zod Schema for Form Validation ---
 const createStreamSchema = z.object({
     name: z.string().min(3, { message: 'Stream name must be at least 3 characters' }),
 });
 type CreateStreamFormInputs = z.infer<typeof createStreamSchema>;
-// --- End Schema ---
 
 interface CreateStreamModalProps {
     isOpen: boolean;
@@ -35,19 +32,17 @@ const CreateStreamModal: React.FC<CreateStreamModalProps> = ({ isOpen, onClose }
     const queryClient = useQueryClient();
     const [formError, setFormError] = useState<string | null>(null);
 
-    // --- Form Setup ---
     const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<CreateStreamFormInputs>({
         resolver: zodResolver(createStreamSchema),
         defaultValues: { name: '' },
     });
 
-    // --- React Query Mutation ---
     const createMutation = useMutation({
-        mutationFn: streamService.createStream, // Function from stream service
+        mutationFn: streamService.createStream,
         onSuccess: (data) => {
             toast.success(`Stream "${data.name}" created successfully! Code: ${data.streamCode}`);
-            queryClient.invalidateQueries({ queryKey: ['myStreams'] }); // Refetch stream list
-            handleClose(); // Close modal and reset form
+            queryClient.invalidateQueries({ queryKey: ['myStreams'] });
+            handleClose();
         },
         onError: (error: Error) => {
             console.error("Create stream error:", error);
@@ -56,25 +51,21 @@ const CreateStreamModal: React.FC<CreateStreamModalProps> = ({ isOpen, onClose }
         },
     });
 
-    // --- Form Submit Handler ---
     const onSubmit = (data: CreateStreamFormInputs) => {
-        setFormError(null); // Clear previous errors
+        setFormError(null);
         createMutation.mutate({ name: data.name.trim() });
     };
 
-    // --- Close Handler (resets form) ---
     const handleClose = () => {
-        reset(); // Reset form fields
-        setFormError(null); // Clear errors
-        onClose(); // Call parent's close handler
+        reset();
+        setFormError(null);
+        onClose();
     };
 
-    // Use Dialog's onOpenChange to handle closing via overlay click or escape key
     const handleOpenChange = (open: boolean) => {
         if (!open) {
             handleClose();
         }
-        // We don't need to handle the 'open' case here as it's controlled by the parent prop
     };
 
     return (
@@ -89,7 +80,7 @@ const CreateStreamModal: React.FC<CreateStreamModalProps> = ({ isOpen, onClose }
 
                 <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-4">
                     <div>
-                        <Label htmlFor="stream-name">Stream Name <span className="text-red-500">*</span></Label>
+                        <div className='mb-2'><Label htmlFor="stream-name">Stream Name <span className="text-red-500">*</span></Label></div>
                         <Input
                             id="stream-name"
                             {...register('name')}

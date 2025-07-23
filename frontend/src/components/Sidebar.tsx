@@ -28,14 +28,12 @@ const Sidebar: React.FC = () => {
     const { streamId: activeStreamId } = useParams<{ streamId?: string }>();
     const [openAccordionItem, setOpenAccordionItem] = useState<string | undefined>(activeStreamId);
 
-    // Fetch user's streams
     const { data: streams, isLoading, error } = useQuery<StreamBasic[], Error>({
-        queryKey: ['myStreams', false], // Key indicates active streams
-        queryFn: () => streamService.getMyStreams(false), // Explicitly fetch non-archived
+        queryKey: ['myStreams', false],
+        queryFn: () => streamService.getMyStreams(false),
         staleTime: 1000 * 60 * 10, // Cache for 10 minutes
     });
 
-    // Update accordion when route changes
     React.useEffect(() => {
         setOpenAccordionItem(activeStreamId);
     }, [activeStreamId]);
@@ -45,9 +43,7 @@ const Sidebar: React.FC = () => {
     };
 
     return (
-        <aside className="w-64 bg-white border-r border-gray-200 flex flex-col flex-shrink-0 h-[calc(100vh-theme(space.16))]">
-            {' '}
-            {/* Adjust height based on Navbar */}
+        <aside className="w-64 bg-white border-r border-gray-200 flex flex-col h-full">
             {/* Top Links */}
             <div className="p-4 border-b">
                 <NavLink
@@ -59,17 +55,17 @@ const Sidebar: React.FC = () => {
                                 : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                         }`
                     }
-                    end // Match only exact path
+                    end
                 >
                     <LayoutDashboard className="mr-3 h-5 w-5" />
                     Dashboard
                 </NavLink>
-                {/* Add other global links here if needed */}
             </div>
-            {/* Stream List */}
+
+            {/* Middle Section - Stream List */}
             <ScrollArea className="flex-1 px-2 py-4">
-                    <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                        My Streams
+                    <h2 className="px-2 mb-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        Active Streams
                     </h2>
                 {isLoading && <p className="px-2 text-xs text-gray-400">Loading streams...</p>}
                 {error && <p className="px-2 text-xs text-red-500">Error loading.</p>}
@@ -132,19 +128,18 @@ const Sidebar: React.FC = () => {
                     </Accordion>
                 )}
                 {!isLoading && !error && (!streams || streams.length === 0) && (
-                    <p className="px-2 text-xs text-gray-400 italic">No streams joined yet.</p>
+                    <p className="px-2 text-xs text-gray-400 italic">No active streams.</p>
                 )}
             </ScrollArea>
-            {/* Bottom Actions - Use passed-in handlers */}
-            <div className="p-4 border-t mt-auto space-y-2">
+
+            {/* Bottom Section */}
+            <div className="p-4 border-t space-y-2">
                 <Button
                     size="sm"
                     variant="outline"
                     className="w-full justify-start text-xs"
                     onClick={openCreateStreamModal}
                 >
-                    {' '}
-                    {/* Add onClick */}
                     <PlusCircle size={14} className="mr-2" /> Create Stream
                 </Button>
                 <Button
@@ -153,8 +148,6 @@ const Sidebar: React.FC = () => {
                     className="w-full justify-start text-xs"
                     onClick={openJoinStreamModal}
                 >
-                    {' '}
-                    {/* Add onClick */}
                     <LogIn size={14} className="mr-2" /> Join Stream
                 </Button>
             </div>
