@@ -21,7 +21,7 @@ import {
     formatDate,
     isDateInTimetableRange,
 } from '../../core/utils';
-import { addDays, isBefore, startOfToday} from 'date-fns';
+import { addDays, isBefore, isPast, startOfToday} from 'date-fns';
 import prisma from '../../infrastructure/prisma';
 import { timetableService } from '../timetable/timetable.service';
 
@@ -39,7 +39,26 @@ export const analyticsService = {
         await streamService.ensureMemberAccess(streamId, requestingUserId);
 
         let startDate: Date;
-        const endDate = endDateStr ? normalizeDate(endDateStr) : normalizeDate(new Date());
+        let endDate: Date;
+
+        if (endDateStr) {
+            endDate = normalizeDate(endDateStr);
+        } else {
+            const mostRecentTimetable = await prisma.timetable.findFirst({
+                where: { streamId: streamId },
+                orderBy: { validFrom: 'desc' },
+                select: { validUntil: true }
+            });
+
+            const today = normalizeDate(new Date());
+            if (mostRecentTimetable?.validUntil && isPast(mostRecentTimetable.validUntil)) {
+                endDate = normalizeDate(mostRecentTimetable.validUntil);
+                console.log(`[Analytics Service BE] Using timetable end date as endDate: ${formatDate(endDate)}`);
+            } else {
+                endDate = today;
+                console.log(`[Analytics Service BE] Using today as endDate: ${formatDate(endDate)}`);
+            }
+        }
 
         if (startDateStr) {
             startDate = normalizeDate(startDateStr);
