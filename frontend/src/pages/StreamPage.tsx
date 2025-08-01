@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { streamService, StreamDetailed } from '../services/stream.service';
-import { Users, Clock, BarChart3, Settings, LogOut, Archive, ArchiveRestore, Loader2, AlertTriangle } from 'lucide-react';
+import { Users, Clock, BarChart3, LogOut, Archive, ArchiveRestore, Loader2, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { Button } from '../components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription, DialogClose } from "../components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription} from "../components/ui/dialog";
 import toast from 'react-hot-toast';
 
 const StreamPage: React.FC = () => {
@@ -25,13 +25,12 @@ const StreamPage: React.FC = () => {
 
     const isOwner = user && stream && stream.ownerId === user.id;
 
-    // --- Mutations ---
     const leaveMutation = useMutation({
         mutationFn: () => streamService.leaveStream(streamId!),
         onSuccess: (data) => {
             toast.success(data.message);
-            queryClient.invalidateQueries({ queryKey: ['myStreams'] }); // Refresh sidebar
-            navigate('/dashboard'); // Go to dashboard after leaving
+            queryClient.invalidateQueries({ queryKey: ['myStreams'] });
+            navigate('/dashboard');
         },
         onError: (err: Error) => toast.error(`Leave failed: ${err.message}`),
         onSettled: () => setIsLeaveConfirmOpen(false),
@@ -39,11 +38,10 @@ const StreamPage: React.FC = () => {
 
     const archiveMutation = useMutation({
         mutationFn: () => streamService.archiveStream(streamId!),
-        onSuccess: (updatedStreamData) => { // updatedStreamData is StreamBasic
+        onSuccess: (updatedStreamData) => {
             toast.success(`Stream "${updatedStreamData.name}" archived.`);
-            queryClient.invalidateQueries({ queryKey: ['myStreams'] }); // Refresh sidebar/dashboard
+            queryClient.invalidateQueries({ queryKey: ['myStreams'] });
             queryClient.invalidateQueries({ queryKey: ['stream', streamId] });
-            // No need to navigate away if you want to stay on the page and see it archived
         },
         onError: (err: Error) => toast.error(`Archive failed: ${err.message}`),
         onSettled: () => setIsArchiveConfirmOpen(false),
@@ -51,7 +49,7 @@ const StreamPage: React.FC = () => {
 
     const unarchiveMutation = useMutation({
         mutationFn: () => streamService.unarchiveStream(streamId!),
-        onSuccess: (updatedStreamData) => { // updatedStreamData is StreamBasic
+        onSuccess: (updatedStreamData) => {
             toast.success(`Stream "${updatedStreamData.name}" unarchived.`);
             queryClient.invalidateQueries({ queryKey: ['myStreams'] });
             queryClient.invalidateQueries({ queryKey: ['stream', streamId] });
@@ -64,9 +62,6 @@ const StreamPage: React.FC = () => {
     if (error) return <div className="text-center p-10 text-red-500">Error: {error.message}</div>;
     if (!stream) return <div className="text-center p-10">Stream not found.</div>;
     if (!stream || !stream.members) {
-        // Handle loading or error state, or return null/empty display
-        // This check should ideally be covered by isLoading/error checks above
-        // but adding it before accessing .length or .map is safer.
         return <div>Loading member data or no members...</div>;
     }
 

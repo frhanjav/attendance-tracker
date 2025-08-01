@@ -102,7 +102,6 @@ export const streamService = {
     },
 
     async getStreamMembers(streamId: string): Promise<StreamMemberOutput[]> {
-        // Could add permission check here if needed (e.g., only members can see other members)
         const members = await streamRepository.findStreamMembers(streamId);
         return members.map(mapMembershipToOutput);
     },

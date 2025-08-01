@@ -9,23 +9,16 @@ import {
 import { NotFoundError, BadRequestError } from '../../core/errors';
 import {
     AttendanceStatus,
-    Timetable,
-    TimetableEntry,
     OverrideType,
     AttendanceRecord,
 } from '@prisma/client';
 import {
     normalizeDate,
-    getDaysInInterval,
-    getISODayOfWeek,
     formatDate,
-    isDateInTimetableRange,
 } from '../../core/utils';
 import { addDays, isBefore, isPast, startOfToday} from 'date-fns';
 import prisma from '../../infrastructure/prisma';
 import { timetableService } from '../timetable/timetable.service';
-
-type TimetableWithEntries = Timetable & { entries: TimetableEntry[] };
 
 export const analyticsService = {
     async getStreamAttendanceStats(
@@ -109,19 +102,16 @@ export const analyticsService = {
 
             if (ov.overrideType === OverrideType.CANCELLED) {
                 if (!cancelledKeys.has(originalKey)) {
-                    // Count distinct cancellations
                     cancelledCounts[ov.originalSubjectName] =
                         (cancelledCounts[ov.originalSubjectName] || 0) + 1;
                     cancelledKeys.add(originalKey);
                 }
             } else if (ov.overrideType === OverrideType.REPLACED) {
-                // Original counts as cancelled
                 if (!cancelledKeys.has(originalKey)) {
                     cancelledCounts[ov.originalSubjectName] =
                         (cancelledCounts[ov.originalSubjectName] || 0) + 1;
                     cancelledKeys.add(originalKey);
                 }
-                // Replacement subject counts as an extra "held" instance
                 if (ov.replacementSubjectName) {
                     replacementCounts[ov.replacementSubjectName] =
                         (replacementCounts[ov.replacementSubjectName] || 0) + 1;
@@ -206,7 +196,6 @@ export const analyticsService = {
             );
             const yesterday = addDays(today, -1);
             try {
-                // Call getStreamAttendanceStats to get historical data
                 const currentStats = await this.getStreamAttendanceStats(
                     input.streamId,
                     userId,

@@ -37,11 +37,6 @@ export const streamRepository = {
         });
     },
 
-    /**
-     * Finds a stream by its ID and includes details about the owner, members,
-     * and the validFrom date of its associated timetables (ordered by date).
-     * The service layer will determine the earliest start date from the timetables array.
-     */
     async findById(streamId: string): Promise<StreamWithDetailsAndTimetables | null> {
         const result = await prisma.stream.findUnique({
             where: { id: streamId },

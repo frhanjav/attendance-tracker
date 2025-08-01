@@ -1,13 +1,11 @@
 import { z } from 'zod';
 import { AttendanceStatus } from '@prisma/client';
 
-// Input for marking attendance for a single class on a specific date
 export const MarkAttendanceSchema = z.object({
     body: z.object({
         streamId: z.string().cuid(),
         subjectName: z.string().min(1),
         courseCode: z.string().nullable().optional(),
-        // Date string in YYYY-MM-DD format
         classDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, { message: "Invalid date format (YYYY-MM-DD)" }),
         status: z.nativeEnum(AttendanceStatus, { errorMap: () => ({ message: 'Invalid attendance status' }) }),
     }),
@@ -32,7 +30,7 @@ export const CancelClassSchema = z.object({
         streamId: z.string().cuid({ message: "Stream ID is required" }),
         classDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, { message: "Invalid date format (YYYY-MM-DD)" }),
         subjectName: z.string().min(1, { message: "Subject name is required" }),
-        // Optional: Include startTime if needed to distinguish multiple classes of the same subject on the same day
+        // Include startTime if needed to distinguish multiple classes of the same subject on the same day
         startTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, { message: 'Invalid time format (HH:MM)' }).optional().nullable(),
     })
 });

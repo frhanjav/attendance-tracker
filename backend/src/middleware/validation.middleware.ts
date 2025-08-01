@@ -12,10 +12,8 @@ export const validateRequest = (schema: AnyZodObject) =>
       return next();
     } catch (error) {
       if (error instanceof ZodError) {
-        // Let the central error handler format Zod errors
         return next(error);
       }
-      // Forward other unexpected errors
       return next(new Error('Internal Server Error during validation'));
     }
   };

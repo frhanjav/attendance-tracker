@@ -4,7 +4,6 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-// Import service and types - ensure types match backend DTOs (e.g., totalHeldClasses)
 import {
     analyticsService,
     StreamAnalyticsData,
@@ -12,10 +11,10 @@ import {
     AttendanceCalculatorInput,
     SubjectStats,
 } from '../services/analytics.service';
-import { Button } from '../components/ui/button'; // Use alias
-import { Input } from '../components/ui/input'; // Use alias
-import { Label } from '../components/ui/label'; // Use alias
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card'; // Use alias
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import {
     Table,
     TableBody,
@@ -23,21 +22,19 @@ import {
     TableHead,
     TableHeader,
     TableRow,
-} from '../components/ui/table'; // Use alias
+} from '../components/ui/table';
 import {
     Select,
     SelectContent,
     SelectItem,
     SelectTrigger,
     SelectValue,
-} from '../components/ui/select'; // Use alias
-import { Switch } from '../components/ui/switch'; // Import Switch component
+} from '../components/ui/select';
+import { Switch } from '../components/ui/switch';
 import toast from 'react-hot-toast';
 import { addDays, format, parseISO } from 'date-fns';
 import { Check, Calendar, TrendingUp, Calculator, Info, Loader2, Edit } from 'lucide-react';
-import { ApiError } from '../lib/apiClient'; // Import ApiError if used in onError
 
-// --- Zod Schema for Calculator Form ---
 const calculatorSchema = z.object({
     targetPercentage: z.coerce.number().min(0).max(100),
     targetDate: z.string().min(1, 'Target date is required'),
@@ -45,7 +42,7 @@ const calculatorSchema = z.object({
 });
 type CalculatorFormInputs = z.infer<typeof calculatorSchema>;
 
-type ManualAttendanceInput = Record<string, string>; // { [subjectName]: attendedCountString }
+type ManualAttendanceInput = Record<string, string>;
 
 const AnalyticsPage: React.FC = () => {
     const { streamId } = useParams<{ streamId: string }>();
@@ -53,8 +50,6 @@ const AnalyticsPage: React.FC = () => {
     const [isManualMode, setIsManualMode] = useState(false);
     const [manualAttendance, setManualAttendance] = useState<ManualAttendanceInput>({});
 
-    // --- Fetch Analytics Data ---
-    // Ensure StreamAnalyticsData type includes totalHeldClasses
     const {
         data: analyticsData,
         isLoading,
@@ -72,7 +67,6 @@ const AnalyticsPage: React.FC = () => {
         `[AnalyticsPage] Query Status: ${status}, IsLoading: ${isLoading}, Error: ${error?.message}`,
     );
 
-    // --- Effect to initialize manual inputs ---
     useEffect(() => {
         if (analyticsData?.subjectStats) {
             const initialManualValues: ManualAttendanceInput = {};
@@ -84,13 +78,12 @@ const AnalyticsPage: React.FC = () => {
         setProjectionResult(null);
     }, [analyticsData, isManualMode]);
 
-    // --- Recalculate Stats Based on Mode ---
     const displayStats = useMemo((): StreamAnalyticsData | null => {
         if (!analyticsData) return null;
         if (!isManualMode) return analyticsData;
 
         let overallAttendedManual = 0;
-        let overallHeldManual = analyticsData.totalHeldClasses; // Held count doesn't change with manual input
+        let overallHeldManual = analyticsData.totalHeldClasses;
 
         const manualSubjectStats: SubjectStats[] = analyticsData.subjectStats.map((stat) => {
             const manualAttendedStr = manualAttendance[stat.subjectName] ?? String(stat.attended);
@@ -99,7 +92,7 @@ const AnalyticsPage: React.FC = () => {
                 !isNaN(manualAttendedNum) && manualAttendedNum >= 0
                     ? manualAttendedNum
                     : stat.attended;
-            const cappedAttended = Math.min(attended, stat.totalHeldClasses); // Cap at held
+            const cappedAttended = Math.min(attended, stat.totalHeldClasses);
             const held = stat.totalHeldClasses;
 
             const percentage =
@@ -122,7 +115,6 @@ const AnalyticsPage: React.FC = () => {
         };
     }, [analyticsData, isManualMode, manualAttendance]);
 
-    // --- Calculator Form Setup ---
     const {
         register,
         handleSubmit,
@@ -133,18 +125,16 @@ const AnalyticsPage: React.FC = () => {
         defaultValues: {
             targetPercentage: 75,
             targetDate: format(addDays(new Date(), 30), 'yyyy-MM-dd'),
-            subjectName: '__OVERALL__', // Use placeholder value
+            subjectName: '__OVERALL__',
         },
         mode: 'onSubmit',
     });
 
-    // Get unique subjects from fetched stats
     const availableSubjects = useMemo(() => {
         if (!analyticsData?.subjectStats) return [];
         return [...new Set(analyticsData.subjectStats.map((s) => s.subjectName))].sort();
     }, [analyticsData]);
 
-    // --- Calculator Mutation ---
     const calculateMutation = useMutation<AttendanceProjection, Error, AttendanceCalculatorInput>({
         mutationFn: analyticsService.calculateProjection,
         onSuccess: (data) => {
@@ -157,44 +147,36 @@ const AnalyticsPage: React.FC = () => {
         },
     });
 
-    // --- Manual Input Handler ---
     const handleManualInputChange = (subjectName: string, value: string, maxAllowed: number) => {
-        // Allow empty string or non-negative integers
         if (value === '' || /^\d+$/.test(value)) {
             const numValue = parseInt(value, 10);
-            // Check if the number exceeds maxAllowed (only if value is not empty)
             if (!isNaN(numValue) && numValue > maxAllowed) {
-                // Optionally provide feedback or just cap the value
                 toast.error(
                     `Attended count cannot exceed held count (${maxAllowed}) for ${subjectName}.`,
                 );
-                // Cap the value in state (optional)
                 setManualAttendance((prev) => ({ ...prev, [subjectName]: String(maxAllowed) }));
             } else {
-                // Update state with valid input (number string or empty string)
                 setManualAttendance((prev) => ({ ...prev, [subjectName]: value }));
             }
         }
-        // Ignore invalid characters (non-digits)
     };
 
-    // --- REVISED Calculator Submit Handler ---
     const onCalculateSubmit = (formData: CalculatorFormInputs) => {
         if (!streamId) {
             toast.error('Stream ID missing.');
             return;
         }
-        if (!analyticsData && !isManualMode) { // Need analyticsData if not in manual mode for backend to fetch
+        if (!analyticsData && !isManualMode) {
             toast.error('Analytics data not loaded yet for historical calculation.');
             return;
         }
-        if (isManualMode && !analyticsData?.subjectStats) { // Need subjectStats for held counts even in manual
+        if (isManualMode && !analyticsData?.subjectStats) {
              toast.error('Subject statistics not available for manual calculation.');
              return;
         }
 
 
-        setProjectionResult(null); // Clear previous result
+        setProjectionResult(null);
 
         let effectiveCurrentAttended: number | undefined = undefined;
         let effectiveCurrentHeld: number | undefined = undefined;
@@ -204,33 +186,30 @@ const AnalyticsPage: React.FC = () => {
             console.log("[onSubmit] Manual Mode. Current manualAttendance state:", JSON.parse(JSON.stringify(manualAttendance)));
             let attendedSum = 0;
             let heldSum = 0;
-            let subjectProcessed = !subjectFilter; // True if no filter, or becomes true if filter matches
+            let subjectProcessed = !subjectFilter;
 
-            if (analyticsData?.subjectStats) { // Ensure subjectStats exists
+            if (analyticsData?.subjectStats) {
                 analyticsData.subjectStats.forEach((stat) => {
                     const isTargetSubject = !subjectFilter || stat.subjectName === subjectFilter;
                     if (isTargetSubject) {
                         subjectProcessed = true;
-                        // Get value from manualAttendance state, fallback to fetched stat.attended if manual entry is invalid/missing
                         const manualAttendedStr = manualAttendance[stat.subjectName];
-                        let subjectAttended = stat.attended; // Default to fetched
+                        let subjectAttended = stat.attended;
 
                         if (manualAttendedStr !== undefined && manualAttendedStr !== '') {
                             const manualAttendedNum = parseInt(manualAttendedStr, 10);
                             if (!isNaN(manualAttendedNum) && manualAttendedNum >= 0) {
-                                subjectAttended = Math.min(manualAttendedNum, stat.totalHeldClasses); // Use manual, capped
+                                subjectAttended = Math.min(manualAttendedNum, stat.totalHeldClasses);
                             } else {
-                                // Invalid manual input, stick to fetched or 0 if fetched is null
                                 subjectAttended = stat.attended ?? 0;
                                 console.warn(`Invalid manual input for ${stat.subjectName}, using fetched/default: ${subjectAttended}`);
                             }
-                        } else if (manualAttendedStr === '') { // Explicitly empty means 0 for manual
+                        } else if (manualAttendedStr === '') {
                             subjectAttended = 0;
                         }
-                        // If manualAttendedStr is undefined, it means no manual input for this subject, so stat.attended is used.
 
                         attendedSum += subjectAttended;
-                        heldSum += stat.totalHeldClasses; // Held count always comes from fetched data
+                        heldSum += stat.totalHeldClasses;
                     }
                 });
             }
@@ -250,24 +229,20 @@ const AnalyticsPage: React.FC = () => {
             }
             console.log("[onSubmit] Manual Mode - Calculated for payload:", { effectiveCurrentAttended, effectiveCurrentHeld });
         }
-        // If not in manual mode, effectiveCurrentAttended and effectiveCurrentHeld remain undefined,
-        // and the backend will fetch the historical data.
 
         const mutationInput: AttendanceCalculatorInput = {
             streamId: streamId,
             targetPercentage: formData.targetPercentage,
             targetDate: formData.targetDate,
             subjectName: subjectFilter,
-            currentAttendedInput: effectiveCurrentAttended, // Will be undefined if not manual mode
-            currentHeldInput: effectiveCurrentHeld,       // Will be undefined if not manual mode
+            currentAttendedInput: effectiveCurrentAttended,
+            currentHeldInput: effectiveCurrentHeld,
         };
 
         console.log("Calculator Payload to be sent:", mutationInput);
         calculateMutation.mutate(mutationInput);
     };
-    // --- End Revised Submit Handler ---
 
-    // --- Render Loading/Error States ---
     if (isLoading)
         return (
             <div className="text-center p-10 flex justify-center items-center">
@@ -280,11 +255,9 @@ const AnalyticsPage: React.FC = () => {
                 Error loading analytics: {error.message}
             </div>
         );
-    // Add check specifically for analyticsData after loading/error handled
     if (!displayStats)
         return <div className="text-center p-10">No analytics data found for this stream.</div>;
 
-    // --- Main Render ---
     return (
         <div className="space-y-8">
             <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
@@ -316,7 +289,7 @@ const AnalyticsPage: React.FC = () => {
                 </p>
             )}
 
-            {/* Overall Stats Cards (Use displayStats) */}
+            {/* Overall Stats Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                 <Card className="shadow-sm">
                     <CardHeader>
@@ -361,7 +334,7 @@ const AnalyticsPage: React.FC = () => {
                 </Card>
             </div>
 
-            {/* Subject Stats Table (Use displayStats, conditional input) */}
+            {/* Subject Stats Table */}
             <Card className="shadow-sm">
                 <CardHeader>
                     {' '}
@@ -378,7 +351,6 @@ const AnalyticsPage: React.FC = () => {
                                 <TableHead className="text-center w-28">
                                     {isManualMode ? 'Attended (Edit)' : 'Attended'}
                                 </TableHead>{' '}
-                                {/* Adjust width */}
                                 <TableHead className="text-center">Held</TableHead>
                                 <TableHead className="text-center">Scheduled</TableHead>
                                 <TableHead className="text-right">Percentage</TableHead>
@@ -407,7 +379,6 @@ const AnalyticsPage: React.FC = () => {
                                                 </span>
                                             )}
                                         </TableCell>
-                                        {/* Attended Cell: Input or Text */}
                                         <TableCell className="text-center">
                                             {isManualMode ? (
                                                 <Input
@@ -425,7 +396,6 @@ const AnalyticsPage: React.FC = () => {
                                                         )
                                                     }
                                                     className={`h-8 text-center max-w-[60px] mx-auto ${
-                                                        // Optional: Add error style if value > max
                                                         parseInt(
                                                             manualAttendance[subject.subjectName] ||
                                                                 '0',
@@ -474,7 +444,6 @@ const AnalyticsPage: React.FC = () => {
                 </CardHeader>
                 <CardContent>
                     <form onSubmit={handleSubmit(onCalculateSubmit)} className="space-y-4">
-                        {/* ... Form Inputs (Target %, Target Date, Subject Select) ... */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
                                 <Label htmlFor="targetPercentage">
@@ -514,7 +483,6 @@ const AnalyticsPage: React.FC = () => {
                             </div>
                             <div>
                                 <Label htmlFor="subjectNameCalc">Subject (Optional)</Label>{' '}
-                                {/* Changed ID slightly */}
                                 <Controller
                                     control={control}
                                     name="subjectName"
@@ -570,7 +538,6 @@ const AnalyticsPage: React.FC = () => {
                             </h4>
                             <p className="text-sm">{projectionResult.message}</p>
                             <div className="text-xs grid grid-cols-2 gap-x-4 gap-y-1 pt-2">
-                                {/* These values come DIRECTLY from the backend calculation result */}
                                 <span>Current Attended: {projectionResult.currentAttended}</span>
                                 <span>Future Held: {projectionResult.futureHeld}</span>
                                 <span>Current Held: {projectionResult.currentHeld}</span>
@@ -586,7 +553,6 @@ const AnalyticsPage: React.FC = () => {
                     {calculateMutation.isError && (
                         <div className="mt-6 p-4 bg-red-50 rounded border border-red-200 text-red-800">
                             <h4 className="font-semibold mb-1">Calculation Error</h4>
-                            {/* Display the error message from the mutation's error object */}
                             <p className="text-sm">
                                 {calculateMutation.error?.message ||
                                     'An unknown error occurred during calculation.'}

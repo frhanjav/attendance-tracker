@@ -15,7 +15,7 @@ const AppLayout: React.FC = () => {
     return (
         <div className="min-h-screen flex flex-col bg-gray-100">
             <Navbar />
-            <div className="flex flex-1 overflow-hidden"> {/* Allow content to scroll */}
+            <div className="flex flex-1 overflow-hidden">
 
                 {/* Sidebar */}
                 <div className="hidden md:flex md:flex-shrink-0"><Sidebar /></div>

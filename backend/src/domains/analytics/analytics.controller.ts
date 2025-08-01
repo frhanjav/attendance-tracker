@@ -16,9 +16,8 @@ export const analyticsController = {
         next: NextFunction,
     ) {
         try {
-            const requestingUser = req.user as AuthenticatedUser; // Assert it has at least an id
+            const requestingUser = req.user as AuthenticatedUser;
             if (!requestingUser?.id) {
-                // Optional: Add runtime check for safety
                 return next(new Error('Authentication error: User ID not found on request.'));
             }
             const requestingUserId = requestingUser.id;
@@ -26,13 +25,10 @@ export const analyticsController = {
             const streamId = req.params.streamId;
             const { userId: targetUserIdParam, startDate, endDate } = req.query;
 
-            // Default to the requesting user if target user ID is not provided
             const targetUserId =
                 typeof targetUserIdParam === 'string' && targetUserIdParam
                     ? targetUserIdParam
                     : requestingUserId;
-
-            // Add validation for dates if needed
 
             const stats = await analyticsService.getStreamAttendanceStats(
                 streamId,
@@ -47,7 +43,6 @@ export const analyticsController = {
         }
     },
 
-    // Example: Get stats for a specific subject (could be combined with above)
     async handleGetSubjectAnalytics(
         req: Request<
             { streamId: string },
@@ -64,9 +59,8 @@ export const analyticsController = {
         next: NextFunction,
     ): Promise<void> {
         try {
-            const requestingUser = req.user as AuthenticatedUser; // Assert type
+            const requestingUser = req.user as AuthenticatedUser;
             if (!requestingUser?.id) {
-                // Optional: Add runtime check for safety
                 return next(new Error('Authentication error: User ID not found on request.'));
             }
             const requestingUserId = requestingUser.id;
@@ -87,7 +81,6 @@ export const analyticsController = {
                     ? targetUserIdParam
                     : requestingUserId;
 
-            // Fetch overall stats and filter for the subject
             const stats = await analyticsService.getStreamAttendanceStats(
                 streamId,
                 targetUserId,
@@ -118,9 +111,8 @@ export const analyticsController = {
         next: NextFunction,
     ) {
         try {
-            const requestingUser = req.user as AuthenticatedUser; // Assert type
+            const requestingUser = req.user as AuthenticatedUser;
             if (!requestingUser?.id) {
-                // Optional: Add runtime check for safety
                 return next(new Error('Authentication error: User ID not found on request.'));
             }
             const userId = requestingUser.id;

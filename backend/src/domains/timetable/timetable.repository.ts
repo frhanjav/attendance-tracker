@@ -1,6 +1,6 @@
 import prisma from '../../infrastructure/prisma';
 import { Timetable, TimetableEntry } from '@prisma/client';
-import { isDateInTimetableRange, normalizeDate } from '../../core/utils';
+import { normalizeDate } from '../../core/utils';
 import { isAfter, isEqual } from 'date-fns';
 
 type TimetableEntryCreateInput = Omit<TimetableEntry, 'id' | 'timetableId'>;
@@ -39,7 +39,6 @@ export const timetableRepository = {
         });
     },
 
-    // --- FIND BY ID ---
     async findById(timetableId: string): Promise<(Timetable & { entries: TimetableEntry[] }) | null> {
         return prisma.timetable.findUnique({
             where: { id: timetableId },
@@ -55,7 +54,6 @@ export const timetableRepository = {
         });
     },
 
-    // --- FIND MANY FOR STREAM (For Import List) ---
      async findManyForStream(streamId: string): Promise<Pick<Timetable, 'id' | 'name' | 'validFrom' | 'validUntil'>[]> {
         return prisma.timetable.findMany({
             where: { streamId },

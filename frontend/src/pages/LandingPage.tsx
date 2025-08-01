@@ -1,8 +1,8 @@
 import React from 'react';
-import Navbar from '../components/Navbar'; // Use the Navbar component
-import { Button } from '../components/ui/button'; // Import Button from shadcn path alias
-import { Calendar, CheckCircle, BarChart, Users, Clock } from 'lucide-react'; // Example icons
-import { config } from '../config'; // Import config
+import Navbar from '../components/Navbar';
+import { Button } from '../components/ui/button';
+import { Calendar, CheckCircle, BarChart, Users, Clock } from 'lucide-react';
+import { config } from '../config';
 
 const GoogleIcon = () => (
     <svg className="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
@@ -51,7 +51,6 @@ const LandingPage: React.FC = () => {
                                 all in one place.
                             </p>
                             <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center md:justify-start">
-                                {/* Single Button to Sign in/Sign up with Google */}
                                 <Button
                                     size="lg"
                                     className="w-full sm:w-auto"
@@ -59,17 +58,8 @@ const LandingPage: React.FC = () => {
                                 >
                                     <GoogleIcon /> Get Started with Google
                                 </Button>
-                                {/* Removed separate Sign In / Get Started buttons */}
                             </div>
                         </div>
-
-                        {/* <div className="md:w-1/2 mt-10 md:mt-0">
-               Placeholder for an image or illustration 
-              <div className="bg-gradient-to-br from-blue-100 via-indigo-100 to-purple-100 p-8 rounded-lg shadow-lg aspect-video flex items-center justify-center">
-                 <Calendar size={80} className="text-blue-500 opacity-80" />
-                 {/* Or use an actual image: <img src="/path/to/hero-image.svg" alt="TimeTable Illustration" />
-              </div>
-            </div> */}
 
                         <div className="md:w-1/2">
                             <div className="relative">
@@ -200,7 +190,6 @@ const LandingPage: React.FC = () => {
                         with our easy-to-use tools.
                     </p>
                     <div className="flex flex-col sm:flex-row justify-center gap-4">
-                        {/* Single Button */}
                         <Button
                             size="lg"
                             variant="secondary"
@@ -238,16 +227,6 @@ const LandingPage: React.FC = () => {
                                             Features
                                         </a>
                                     </li>
-                                    {/* <li>
-                                        <a href="#" className="text-gray-400 hover:text-white">
-                                            Pricing
-                                        </a>
-                                    </li> */}
-                                    <li>
-                                        <a href="#" className="text-gray-400 hover:text-white">
-                                            FAQ
-                                        </a>
-                                    </li>
                                 </ul>
                             </div>
 
@@ -256,11 +235,6 @@ const LandingPage: React.FC = () => {
                                     Company
                                 </h3>
                                 <ul className="space-y-2">
-                                    {/* <li>
-                                        <a href="#" className="text-gray-400 hover:text-white">
-                                            About
-                                        </a>
-                                    </li> */}
                                     <li>
                                         <a
                                             href="https://farhan.leverage.blog/"

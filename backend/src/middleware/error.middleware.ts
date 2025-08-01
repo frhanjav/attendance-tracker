@@ -25,7 +25,6 @@ const handlePrismaClientKnownRequestError = (err: Prisma.PrismaClientKnownReques
   }
 };
 
-// --- JWT Error Handler ---
 const handleJWTError = (err: Error): AppError => {
   if (err instanceof jwt.JsonWebTokenError) {
        return new UnauthorizedError('Invalid token. Please log in again.');
@@ -36,13 +35,11 @@ const handleJWTError = (err: Error): AppError => {
   return new UnauthorizedError('Authentication error. Please log in again.');
 }
 
-// --- Main Error Handler Middleware ---
 export const errorHandler = (err: Error, req: Request, res: Response, next: NextFunction) => {
   console.error('ERROR 💥:', err);
 
   let operationalError: AppError;
 
-  // --- Error Type Conversion ---
   if (err instanceof AppError) {
       operationalError = err;
   } else if (err instanceof ZodError) {
@@ -57,18 +54,13 @@ export const errorHandler = (err: Error, req: Request, res: Response, next: Next
       console.error('UNKNOWN ERROR TYPE:', err);
   }
 
-
-  // --- Send Response ---
-  // For operational errors (validation, not found, unauthorized, etc.), send specific message
   if (operationalError.isOperational) {
       return res.status(operationalError.statusCode).json({
-          status: operationalError.statusCode >= 400 && operationalError.statusCode < 500 ? 'fail' : 'error', // Use 'fail' for 4xx, 'error' for 5xx
+          status: operationalError.statusCode >= 400 && operationalError.statusCode < 500 ? 'fail' : 'error',
           message: operationalError.message,
       });
   }
 
-  // For non-operational/programming errors:
-  // In development, send detailed error
   if (config.nodeEnv === 'development') {
       return res.status(operationalError.statusCode).json({
           status: 'error',
@@ -78,8 +70,6 @@ export const errorHandler = (err: Error, req: Request, res: Response, next: Next
       });
   }
 
-  // In production, send generic message for non-operational errors
-  // We already logged the detailed error above
   return res.status(500).json({
       status: 'error',
       message: 'Something went very wrong!',

@@ -1,17 +1,15 @@
 import React from 'react';
 import { useRouteError, isRouteErrorResponse, Link } from 'react-router-dom';
-import { Button } from '../components/ui/button'; // Use your button
+import { Button } from '../components/ui/button';
 
 const ErrorBoundary: React.FC = () => {
-  // useRouteError provides the error that was thrown
   const error = useRouteError();
   let errorMessage: string;
   let errorStatus: number | undefined;
 
-  console.error("Routing/Rendering Error Boundary Caught:", error); // Log the full error
+  console.error("Routing/Rendering Error Boundary Caught:", error);
 
   if (isRouteErrorResponse(error)) {
-    // Error has status code and data (e.g., from loaders/actions)
     errorMessage = error.data?.message || error.statusText;
     errorStatus = error.status;
   } else if (error instanceof Error) {
@@ -30,7 +28,6 @@ const ErrorBoundary: React.FC = () => {
         {errorMessage || "Sorry, an unexpected error has occurred."}
       </p>
       <pre className="text-xs text-left bg-red-100 p-4 rounded overflow-auto max-w-xl mb-6 border border-red-200">
-        {/* Displaying stack might be too much for users, good for dev */}
         {error instanceof Error ? error.stack : JSON.stringify(error, null, 2)}
       </pre>
       <Button asChild>

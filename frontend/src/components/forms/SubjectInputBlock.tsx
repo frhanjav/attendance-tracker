@@ -11,13 +11,8 @@ import {
     SelectValue,
 } from '../../components/ui/select';
 import { Trash2, PlusCircle } from 'lucide-react';
-import { z } from 'zod'; // Import Zod if needed for inferred types below
+import { z } from 'zod';
 
-// --- Re-define or Import Form Schema/Types ---
-// It's best practice to define these centrally and import them
-// For simplicity here, we might redefine parts or assume they are passed via generics
-// Let's assume the main form input type is passed via generic or defined here
-// Example using inline definition (better to import):
 const timeSlotSchema = z
     .object({
         dayOfWeek: z.coerce.number().int().min(1).max(7),
@@ -52,7 +47,6 @@ const createTimetableFormSchema = z.object({
     subjects: z.array(subjectSchema).min(1),
 });
 type CreateTimetableFormInputs = z.infer<typeof createTimetableFormSchema>;
-// --- End Schema/Types ---
 
 const weekDays = [
     { value: 1, label: 'Mon' },
@@ -64,16 +58,14 @@ const weekDays = [
     { value: 7, label: 'Sun' },
 ];
 
-// --- Component Props Interface ---
 interface SubjectInputBlockProps {
     subjectIndex: number;
-    control: Control<CreateTimetableFormInputs>; // Use the specific form type
+    control: Control<CreateTimetableFormInputs>;
     register: UseFormRegister<CreateTimetableFormInputs>;
     removeSubject: (index: number) => void;
     errors: FieldErrors<CreateTimetableFormInputs>;
 }
 
-// --- Component Definition ---
 const SubjectInputBlock: React.FC<SubjectInputBlockProps> = ({
     subjectIndex,
     control,
@@ -81,7 +73,6 @@ const SubjectInputBlock: React.FC<SubjectInputBlockProps> = ({
     removeSubject,
     errors,
 }) => {
-    // Nested Field Array for Time Slots within this subject
     const {
         fields: timeSlotFields,
         append: appendTimeSlot,
@@ -91,18 +82,16 @@ const SubjectInputBlock: React.FC<SubjectInputBlockProps> = ({
         name: `subjects.${subjectIndex}.timeSlots`,
     });
 
-    // Get potential errors for this specific subject block
     const subjectErrors = errors.subjects?.[subjectIndex];
 
     return (
         <div className="p-4 border rounded-md bg-gray-50/80 space-y-4 relative shadow-sm">
-            {/* Remove Subject Button */}
             <Button
                 type="button"
                 variant="ghost"
                 size="icon"
                 onClick={() => removeSubject(subjectIndex)}
-                className="absolute top-2 right-2 text-gray-400 hover:bg-red-100 hover:text-red-600 h-7 w-7 z-10" // Ensure button is clickable
+                className="absolute top-2 right-2 text-gray-400 hover:bg-red-100 hover:text-red-600 h-7 w-7 z-10"
                 title="Remove Subject Block"
             >
                 <Trash2 size={14} />
@@ -135,14 +124,11 @@ const SubjectInputBlock: React.FC<SubjectInputBlockProps> = ({
                         {...register(`subjects.${subjectIndex}.courseCode`)}
                         placeholder="e.g., CS501"
                     />
-                    {/* No error display needed for optional field unless specific validation added */}
                 </div>
             </div>
 
             {/* Time Slots for this Subject */}
             <div className="space-y-3 pl-4 border-l-2 border-blue-200 ml-1">
-                {' '}
-                {/* Added ml-1 for spacing */}
                 <Label className="text-sm font-medium text-gray-600 block mb-1">
                     Scheduled Times <span className="text-red-500">*</span>
                 </Label>
@@ -189,7 +175,6 @@ const SubjectInputBlock: React.FC<SubjectInputBlockProps> = ({
                                         </Select>
                                     )}
                                 />
-                                {/* No error display needed for select with default */}
                             </div>
                             {/* Start Time */}
                             <div className="flex-grow min-w-[95px]">
@@ -274,4 +259,4 @@ const SubjectInputBlock: React.FC<SubjectInputBlockProps> = ({
     );
 };
 
-export default SubjectInputBlock; // Export the component
+export default SubjectInputBlock;

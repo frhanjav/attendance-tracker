@@ -1,4 +1,3 @@
-/* Use @import for the Vite plugin */
 @import "tailwindcss";
 
 @custom-variant dark (&:is(.dark *));

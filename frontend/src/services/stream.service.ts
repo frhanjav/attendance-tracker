@@ -14,7 +14,7 @@ export interface StreamDetailed extends StreamBasic {
          userId: string;
          streamId: string;
          role: string;
-         joinedAt: Date; // Or string if not parsed
+         joinedAt: Date;
          user: { id: string; name: string | null; email: string; };
      }>;
      streamStartDate: string | null;
@@ -51,7 +51,7 @@ export const streamService = {
     getMyStreams: async (includeArchived: boolean = false): Promise<StreamBasic[]> => {
         try {
             const response = await apiClient.get<StreamListResponse>('/streams', {
-                params: { includeArchived } // Ensure this is being sent
+                params: { includeArchived }
             });
             return response.data.data.streams;
         } catch (error: any) {

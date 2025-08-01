@@ -1,5 +1,5 @@
 import prisma from '../../infrastructure/prisma';
-import { User } from '@prisma/client'; // Import generated Prisma types
+import { User } from '@prisma/client';
 
 export const userRepository = {
   async findByEmail(email: string): Promise<User | null> {
@@ -13,6 +13,4 @@ export const userRepository = {
   async create(data: Omit<User, 'id' | 'createdAt' | 'updatedAt'>): Promise<User> {
     return prisma.user.create({ data });
   },
-
-  // Add other methods as needed (update, delete, etc.)
 };

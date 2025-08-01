@@ -7,7 +7,7 @@ const saltRounds = 10; // Match .env
 async function main() {
   console.log(`Start seeding ...`);
 
-  // Clean existing data (optional)
+  // Clean existing data
   await prisma.bulkAttendanceEntry.deleteMany();
   await prisma.attendanceRecord.deleteMany();
   await prisma.timetableEntry.deleteMany();
@@ -39,7 +39,6 @@ async function main() {
     data: {
       name: 'B.Tech CSE 2024',
       ownerId: user1.id,
-      // streamCode is auto-generated
     },
   });
   console.log(`Created stream: ${stream1.name} (Code: ${stream1.streamCode})`);
@@ -58,7 +57,7 @@ async function main() {
       data: {
           streamId: stream1.id,
           name: "Semester 1",
-          validFrom: new Date("2024-01-15T00:00:00.000Z"), // Use ISO strings or Date objects
+          validFrom: new Date("2024-01-15T00:00:00.000Z"),
           validUntil: new Date("2024-05-15T00:00:00.000Z"),
           entries: {
               create: [
@@ -76,8 +75,6 @@ async function main() {
       }
   });
   console.log(`Created timetable: ${timetable1.name}`);
-
-
   console.log(`Seeding finished.`);
 }
 

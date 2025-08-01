@@ -51,13 +51,12 @@ const TimetablePage: React.FC = () => {
         return allTimetables.length > 0 ? allTimetables[0] : null;
     }, [allTimetables]);
 
-    // --- Mutation for setting end date ---
     const setEndDateMutation = useMutation<TimetableOutput, Error, { timetableId: string, data: SetEndDateInput }>({
         mutationFn: (vars) => timetableService.setEndDate(vars.timetableId, vars.data),
         onSuccess: (updatedData) => {
             toast.success(`End date set for timetable "${updatedData.name}"`);
             queryClient.invalidateQueries({ queryKey: ['activeTimetable', streamId] });
-            queryClient.invalidateQueries({ queryKey: ['timetableList', streamId] }); // For import modal
+            queryClient.invalidateQueries({ queryKey: ['timetableList', streamId] });
             queryClient.invalidateQueries({ queryKey: ['weeklySchedule', streamId] });
             queryClient.invalidateQueries({ queryKey: ['attendanceWeek', streamId] });
             queryClient.invalidateQueries({ queryKey: ['streamAnalytics', streamId] });
@@ -68,7 +67,7 @@ const TimetablePage: React.FC = () => {
 
     const openEndModal = (timetable: TimetableBasicInfo) => {
         setTimetableToEnd({ id: timetable.id, name: timetable.name, validFrom: timetable.validFrom });
-        setEndDate(''); // Clear previous date input
+        setEndDate('');
         setIsEndModalOpen(true);
     };
     const handleCloseEndModal = () => {
@@ -171,13 +170,6 @@ const TimetablePage: React.FC = () => {
                      </form>
                  </DialogContent>
              </Dialog>
-
-             {/* Optional: Historical Timetable List */}
-            {/* Consider adding a separate component or section if needed */}
-            {/* <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200 mt-8">
-                 <h2 className="text-xl font-semibold text-gray-700 mb-4 border-b pb-3">Timetable History</h2>
-                 { ... list existingTimetables query results ... }
-            </div> */}
         </div>
     );
 };

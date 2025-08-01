@@ -13,9 +13,8 @@ import {
     normalizeDate,
     getISODayOfWeek,
     getDaysInInterval,
-    isDateInTimetableRange
 } from '../../core/utils';
-import { isBefore, isAfter, addDays, isEqual } from 'date-fns';
+import { isBefore, isAfter, isEqual } from 'date-fns';
 import prisma from '../../infrastructure/prisma';
 import { SetEndDateInput } from './timetable.dto';
 
@@ -126,9 +125,8 @@ export const timetableService = {
         streamId: string,
         userId: string,
     ): Promise<TimetableBasicInfo[]> {
-        await streamService.ensureMemberAccess(streamId, userId); // Any member can see list to import
+        await streamService.ensureMemberAccess(streamId, userId);
         const timetables = await timetableRepository.findManyForStream(streamId);
-        // Map to basic info DTO, converting dates to ISO strings
         return timetables.map((tt) => ({
             id: tt.id,
             name: tt.name,
@@ -161,10 +159,6 @@ export const timetableService = {
                     .filter((entry) => entry.dayOfWeek === dayOfWeek)
                     .forEach((entry) => {
                         const dateStr = formatDate(day);
-                        // The status here is always 'SCHEDULED' because if it were globally
-                        // cancelled, findActiveByStreamAndDate should ideally know this,
-                        // or we determine it later in attendanceService.
-                        // Let's keep it simple: this function only returns the schedule.
                         schedule.push({
                             date: dateStr,
                             dayOfWeek: dayOfWeek,
@@ -257,7 +251,6 @@ export const timetableService = {
         return scheduledCounts;
     },
 
-    // --- Get Timetable Details ---
     async getTimetableDetails(timetableId: string, userId: string): Promise<TimetableOutput> {
         const timetable = await timetableRepository.findById(timetableId);
         if (!timetable) {
@@ -286,7 +279,6 @@ export const timetableService = {
             );
         }
 
-        const updatedTimetable = await timetableRepository.setEndDate(timetableId, endDate);
         const finalTimetable = await timetableRepository.findById(timetableId);
 
         if (!finalTimetable) throw new NotFoundError('Failed to retrieve updated timetable.');

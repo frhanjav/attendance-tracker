@@ -5,39 +5,35 @@ import {
     Navigate,
     useLocation,
 } from 'react-router-dom';
-import LandingPage from '../pages/LandingPage'; // Import LandingPage
+import LandingPage from '../pages/LandingPage';
 import DashboardPage from '../pages/DashboardPage';
 import StreamPage from '../pages/StreamPage';
 import TimetablePage from '../pages/TimetablePage';
 import AttendancePage from '../pages/AttendancePage';
-import AnalyticsPage from '../pages/AnalyticsPage'; // Add AnalyticsPage
+import AnalyticsPage from '../pages/AnalyticsPage';
 import NotFoundPage from '../pages/NotFoundPage';
 import AppLayout from '../layouts/AppLayout';
 import { useAuth } from '../hooks/useAuth';
 import React from 'react';
-import ErrorBoundary from '../components/ErrorBoundary'; // Import the boundary
+import ErrorBoundary from '../components/ErrorBoundary';
 
-// Loading Spinner Component (Placeholder)
 const LoadingSpinner: React.FC = () => (
     <div className="flex justify-center items-center h-screen">
         <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
     </div>
 );
 
-// ProtectedRoute: Redirects to LANDING page if not logged in
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { user, isLoading } = useAuth();
     const location = useLocation();
 
     if (isLoading) return <LoadingSpinner />;
     if (!user) {
-        // Redirect to landing page, saving the location they tried to access
         return <Navigate to="/landing" state={{ from: location }} replace />;
     }
     return <>{children}</>;
 };
 
-// PublicOnlyRoute: Redirects to DASHBOARD if logged in (used for Landing page)
 const PublicOnlyRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { user, isLoading } = useAuth();
     if (isLoading) return <LoadingSpinner />;
@@ -47,7 +43,6 @@ const PublicOnlyRoute: React.FC<{ children: React.ReactNode }> = ({ children }) 
     return <>{children}</>;
 };
 
-// Define the router configuration
 const router = createBrowserRouter([
     {
         path: '/',
@@ -55,26 +50,21 @@ const router = createBrowserRouter([
         errorElement: <ErrorBoundary />,
         children: [
             {
-                // Authenticated routes use AppLayout
                 element: (
                     <ProtectedRoute>
                         <AppLayout />
                     </ProtectedRoute>
                 ),
-                // You could add errorElement here too for errors specific to AppLayout or its children
-                // errorElement: <ErrorBoundary />,
                 children: [
                     { path: 'dashboard', element: <DashboardPage /> },
                     { path: 'streams/:streamId', element: <StreamPage /> },
                     { path: 'streams/:streamId/timetable', element: <TimetablePage /> },
                     { path: 'streams/:streamId/attendance', element: <AttendancePage /> },
-                    { path: 'streams/:streamId/analytics', element: <AnalyticsPage /> }, // Add analytics route
-                    // Add other authenticated routes here
+                    { path: 'streams/:streamId/analytics', element: <AnalyticsPage /> },
                 ],
             },
             {
-                // Landing Page Route - accessible only when logged out
-                path: 'landing', // Use a specific path like /landing
+                path: 'landing',
                 element: (
                     <PublicOnlyRoute>
                         <LandingPage />
@@ -84,13 +74,11 @@ const router = createBrowserRouter([
         ],
     },
     {
-        // Catch-all Not Found Route
         path: '*',
         element: <NotFoundPage />,
     },
 ]);
 
-// Root component to handle the initial redirect logic for '/'
 function Root() {
     const { user, isLoading } = useAuth();
     const location = useLocation();

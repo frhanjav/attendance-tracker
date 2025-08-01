@@ -10,7 +10,7 @@ const NotFoundPage: React.FC = () => {
                 Sorry, the page you are looking for does not exist or has been moved.
             </p>
             <Link
-                to="/dashboard" // Link back to dashboard (or login if not authenticated)
+                to="/dashboard"
                 className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
             >
                 Go Back Home

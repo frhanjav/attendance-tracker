@@ -5,9 +5,9 @@ export class AppError extends Error {
   constructor(message: string, statusCode: number, isOperational = true) {
     super(message);
     this.statusCode = statusCode;
-    this.isOperational = isOperational; // Distinguish operational errors from programming errors
+    this.isOperational = isOperational;
 
-    Object.setPrototypeOf(this, new.target.prototype); // Restore prototype chain
+    Object.setPrototypeOf(this, new.target.prototype);
     Error.captureStackTrace(this);
   }
 }

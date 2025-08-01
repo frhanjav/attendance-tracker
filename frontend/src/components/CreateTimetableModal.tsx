@@ -3,19 +3,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
     useForm,
     useFieldArray,
-    Controller,
-    Control,
-    FieldErrors,
-    UseFormRegister,
 } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-// Import necessary types/service from service file
 import {
     timetableService,
     TimetableOutput,
     TimetableBasicInfo,
-    CreateTimetableFrontendInput // Type for the payload expected by the service function
+    CreateTimetableFrontendInput
 } from '../services/timetable.service';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -35,13 +30,12 @@ import {
     DialogFooter,
     DialogDescription,
 } from '../components/ui/dialog';
-import { Trash2, PlusCircle, Import, Loader2 } from 'lucide-react';
+import { PlusCircle, Import, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { parseISO, format } from 'date-fns';
-import SubjectInputBlock from '../components/forms/SubjectInputBlock'; // Import the sub-component
+import SubjectInputBlock from '../components/forms/SubjectInputBlock';
 import { ApiError } from '../lib/apiClient';
 
-// --- Zod Schemas and Inferred Types Defined LOCALLY ---
 const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
 const invalidTimeMessage = 'Invalid time (HH:MM)';
 const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
@@ -66,12 +60,8 @@ const createTimetableFormSchema = z.object({
     subjects: z.array(subjectFormSchema).min(1, { message: 'Add at least one subject' })
 }).refine(data => !data.validUntil || data.validUntil === "" || !data.validFrom || new Date(data.validUntil) >= new Date(data.validFrom), { message: "Valid until must be on or after valid from", path: ["validUntil"] });
 
-// This type is for the form's state and data structure
 type CreateTimetableFormInputs = z.infer<typeof createTimetableFormSchema>;
-// --- End Local Schemas/Types ---
 
-// Helper function to transform flat API data to nested form data (needed for import)
-// Ensure this function exists and is correct
 const transformApiDataToFormData = (
     apiData: TimetableOutput | null,
 ): CreateTimetableFormInputs | null => {
@@ -99,18 +89,12 @@ const transformApiDataToFormData = (
     });
     
     return {
-        name: apiData.name, // Or maybe clear name for import?
+        name: apiData.name,
         validFrom: format(parseISO(apiData.validFrom), 'yyyy-MM-dd'),
         validUntil: apiData.validUntil ? format(parseISO(apiData.validUntil), 'yyyy-MM-dd') : '',
         subjects: Array.from(subjectsMap.values()),
     };
 };
-
-const weekDays = [
-    { value: 1, label: 'Mon' }, { value: 2, label: 'Tue' }, { value: 3, label: 'Wed' },
-    { value: 4, label: 'Thu' }, { value: 5, label: 'Fri' }, { value: 6, label: 'Sat' },
-    { value: 7, label: 'Sun' },
-];
 
 interface CreateTimetableModalProps {
     isOpen: boolean;
@@ -123,7 +107,6 @@ const CreateTimetableModal: React.FC<CreateTimetableModalProps> = ({ isOpen, onC
     const [formError, setFormError] = useState<string | null>(null);
     const [selectedImportId, setSelectedImportId] = useState<string>('');
 
-    // --- Form Setup ---
     const {
         register,
         handleSubmit,
@@ -152,7 +135,6 @@ const CreateTimetableModal: React.FC<CreateTimetableModalProps> = ({ isOpen, onC
         remove: removeSubject,
     } = useFieldArray({ control, name: 'subjects' });
 
-    // --- Queries ---
     const { data: importableTimetables = [], isLoading: isLoadingImportList } = useQuery<
         TimetableBasicInfo[],
         Error
@@ -173,16 +155,15 @@ const CreateTimetableModal: React.FC<CreateTimetableModalProps> = ({ isOpen, onC
         staleTime: Infinity,
     });
 
-    // --- Effect for Import ---
     useEffect(() => {
         if (timetableToImport) {
             const formData = transformApiDataToFormData(timetableToImport);
             if (formData) {
                 reset({
-                    name: '', // Clear name/dates for the new timetable
+                    name: '',
                     validFrom: '',
                     validUntil: '',
-                    subjects: formData.subjects, // Use imported subjects/slots
+                    subjects: formData.subjects,
                 });
                 toast.success(
                     `Imported schedule from "${timetableToImport.name}". Set name & dates.`,
@@ -194,12 +175,10 @@ const CreateTimetableModal: React.FC<CreateTimetableModalProps> = ({ isOpen, onC
         }
     }, [timetableToImport, reset]);
 
-    // --- Create Mutation ---
-    // The mutation function expects the type defined in the service: { streamId: string } & CreateTimetableFrontendInput
     const createTimetableMutation = useMutation<
         TimetableOutput,
         Error,
-        { streamId: string } & CreateTimetableFrontendInput // Matches service input type
+        { streamId: string } & CreateTimetableFrontendInput
     >({
         mutationFn: timetableService.createTimetable,
         onSuccess: () => {
@@ -224,25 +203,22 @@ const CreateTimetableModal: React.FC<CreateTimetableModalProps> = ({ isOpen, onC
         },
     });
 
-    // --- Form Submit Handler ---
-    const onSubmit = (data: CreateTimetableFormInputs) => { // data is type CreateTimetableFormInputs
+    const onSubmit = (data: CreateTimetableFormInputs) => {
         if (!streamId) return;
         setFormError(null);
 
-        // Construct the payload matching the type expected by the mutation/service
-        // CreateTimetableFrontendInput includes name, validFrom, validUntil?, subjects
         const mutationPayload: { streamId: string } & CreateTimetableFrontendInput = {
             streamId: streamId,
             name: data.name,
             validFrom: data.validFrom,
-            validUntil: data.validUntil || null, // Map empty string to null
-            subjects: data.subjects.map(subject => ({ // Ensure nested structure matches SubjectInput
+            validUntil: data.validUntil || null,
+            subjects: data.subjects.map(subject => ({
                 subjectName: subject.subjectName,
-                courseCode: subject.courseCode || undefined, // Map empty string to undefined if service type expects optional string
-                timeSlots: subject.timeSlots.map(slot => ({ // Ensure nested structure matches TimeSlotInput
+                courseCode: subject.courseCode || undefined,
+                timeSlots: subject.timeSlots.map(slot => ({
                     dayOfWeek: slot.dayOfWeek,
-                    startTime: slot.startTime || undefined, // Map empty string to undefined
-                    endTime: slot.endTime || undefined,   // Map empty string to undefined
+                    startTime: slot.startTime || undefined,
+                    endTime: slot.endTime || undefined,
                 }))
             })),
         };
@@ -250,7 +226,6 @@ const CreateTimetableModal: React.FC<CreateTimetableModalProps> = ({ isOpen, onC
         createTimetableMutation.mutate(mutationPayload);
     };
 
-    // --- Close Handlers ---
     const handleClose = () => {
         reset();
         setFormError(null);

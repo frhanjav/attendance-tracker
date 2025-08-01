@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../hooks/useAuth'; // Corrected import path
-import { Button } from '../components/ui/button'; // Import from shadcn path alias
+import { useAuth } from '../hooks/useAuth';
+import { Button } from '../components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,9 +9,8 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger
-} from '../components/ui/dropdown-menu'; // Import from shadcn path alias
-import { Calendar, User, LogOut, LayoutDashboard, Settings, GraduationCap } from 'lucide-react'; // Import icons
-import { config } from '../config'; // Import config
+} from '../components/ui/dropdown-menu';
+import { Calendar, User, LogOut, LayoutDashboard} from 'lucide-react';
 
 const GoogleIcon = () => (
   <svg className="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
@@ -28,36 +27,16 @@ const Navbar: React.FC = () => {
 
   const handleLogout = () => {
     logout();
-    navigate('/landing'); // Redirect to landing after logout
+    navigate('/landing');
   };
 
-  // Placeholder for profile navigation
-  // const handleProfileClick = () => {
-  //     // navigate('/profile'); // Uncomment when profile page exists
-  //     alert('Profile page not implemented yet.');
-  // };
-
-    // Function to initiate Google Login
     const handleGoogleLogin = () => {
-      // Construct the absolute URL pointing to the backend via the proxy/host
-      // We know the proxy runs on localhost:8080 in this test setup
-      const backendApiPrefix = '/api/v1'; // Matches VITE_API_BASE_URL used for client-side fetch
-      const proxyOrigin = window.location.origin; // Gets http://localhost:8080
-      // We need the backend origin for the redirect, which might be different
-      // For the local prod test, the backend is accessible via host port 3001
-      // For actual deployment, it would be your domain.
-      // Let's assume for this test, we redirect directly to backend's exposed port
-      // OR rely on the proxy handling it (which failed before).
-      // BEST APPROACH: Redirect to the path on the CURRENT origin (the proxy)
-      const googleAuthUrl = `${proxyOrigin}${backendApiPrefix}/auth/google`; // e.g., http://localhost:8080/api/v1/auth/google
-  
-      // --- Alternative (if direct backend access needed, less ideal with proxy) ---
-      // const backendOrigin = 'http://localhost:3001'; // Backend's direct access port
-      // const googleAuthUrl = `${backendOrigin}${backendApiPrefix}/auth/google`;
-      // ---
+      const backendApiPrefix = '/api/v1';
+      const proxyOrigin = window.location.origin;
+      const googleAuthUrl = `${proxyOrigin}${backendApiPrefix}/auth/google`; 
   
       console.log("Redirecting to Google Auth:", googleAuthUrl);
-      window.location.href = googleAuthUrl; // Redirect browser
+      window.location.href = googleAuthUrl;
   };
   
   return (
@@ -72,53 +51,43 @@ const Navbar: React.FC = () => {
         {/* Navigation/Actions */}
         <div>
             {user ? (
-              // --- Logged In State ---
               <div className="flex items-center space-x-4">
                 
-
-                {/* User Dropdown using shadcn/ui components */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="relative h-8 w-8 rounded-full">
                        <div className="flex items-center justify-center h-full w-full rounded-full bg-gray-100 text-gray-600">
-                           <User className="h-4 w-4" /> {/* Use Lucide User icon */}
+                           <User className="h-4 w-4" />
                        </div>
                     </Button>
                   </DropdownMenuTrigger>
+
                   <DropdownMenuContent className="w-56" align="end" forceMount>
                     <DropdownMenuLabel className="font-normal">
                       <div className="flex flex-col space-y-1">
                         <p className="text-sm font-medium leading-none text-gray-900">{user.name || 'User'}</p>
                         <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
-                        {/* Add role if available on user object - adjust user type if needed */}
-                        {/* {user.role && (
-                            <div className="flex items-center space-x-1 text-xs text-muted-foreground pt-1">
-                            <GraduationCap className="h-3 w-3" />
-                            <span className="capitalize">{user.role}</span>
-                            </div>
-                        )} */}
                       </div>
                     </DropdownMenuLabel>
+
                     <DropdownMenuSeparator />
-                    {/* Use DropdownMenuItem with asChild for Links */}
+
                     <DropdownMenuItem asChild>
                       <Link to="/dashboard" className="flex items-center cursor-pointer">
                         <LayoutDashboard size={14} className="mr-2"/> Dashboard
                       </Link>
                     </DropdownMenuItem>
-                    {/* <DropdownMenuItem onClick={handleProfileClick} className="flex items-center cursor-pointer">
-                       <Settings size={14} className="mr-2"/> Profile
-                    </DropdownMenuItem> */}
+
                     <DropdownMenuSeparator />
-                    {/* Use DropdownMenuItem directly for actions */}
+
                     <DropdownMenuItem onClick={handleLogout} className="flex items-center text-red-600 focus:bg-red-50 focus:text-red-700 cursor-pointer">
                       <LogOut size={14} className="mr-2"/> Log out
                     </DropdownMenuItem>
+
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
             ) : (
-              // --- Logged Out State ---
               <div>
                 <Button onClick={handleGoogleLogin} variant="outline" size="sm">
                     <GoogleIcon />

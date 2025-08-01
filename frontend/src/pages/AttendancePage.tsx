@@ -1,29 +1,23 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient, UseMutationResult } from '@tanstack/react-query';
 import {
     attendanceService,
-    WeeklyAttendanceViewEntry, // Use this type now
+    WeeklyAttendanceViewEntry,
     AttendanceStatus,
     MarkAttendanceInput,
-    BulkAttendanceInput,
     AttendanceRecordOutput
 } from '../services/attendance.service';
 import { streamService, StreamDetailed } from '../services/stream.service';
-import { format, addDays, subDays, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, differenceInWeeks, parseISO } from 'date-fns';
+import { format, addDays, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, differenceInWeeks, parseISO } from 'date-fns';
 import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
-import { Check, X, AlertCircle, HelpCircle, ArrowLeft, ArrowRight, Loader2, Info, Repeat } from 'lucide-react'; // Keep icons needed for legend/buttons
+import { Check, X, ArrowLeft, ArrowRight, Loader2, Repeat } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-// --- Attendance Button Component (Simplified) ---
 interface AttendanceButtonProps {
-    // Use the detailed WeeklyAttendanceViewEntry type
     viewEntry: WeeklyAttendanceViewEntry | null;
     streamId: string;
-    // classDate is implicitly known from viewEntry.date
     currentStatus: AttendanceStatus;
     mutation: UseMutationResult<AttendanceRecordOutput, Error, MarkAttendanceInput>;
     setMutatingEntryKey: React.Dispatch<React.SetStateAction<string | null>>;
@@ -37,10 +31,8 @@ const AttendanceButton: React.FC<AttendanceButtonProps> = ({
          return <span className="text-xs text-red-600 italic mt-2 block h-7">Cancelled</span>;
     }
 
-    // Key should be unique for the specific record being potentially updated
     const entryKey = viewEntry.recordId || `${viewEntry.date}_${viewEntry.subjectName}_${viewEntry.isReplacement}`;
     const isMutatingThis = mutatingEntryKey === entryKey;
-    // User attended if their specific status for this entry is OCCURRED
     const isAttended = viewEntry.status === AttendanceStatus.OCCURRED;
 
     const handleToggle = () => {
@@ -50,9 +42,8 @@ const AttendanceButton: React.FC<AttendanceButtonProps> = ({
             streamId: streamId,
             subjectName: viewEntry.subjectName,
             courseCode: viewEntry.courseCode,
-            classDate: viewEntry.date, // Send YYYY-MM-DD string
+            classDate: viewEntry.date,
             status: newStatus,
-            // Backend upsert will handle creating/updating the correct record
         });
     };
 
@@ -69,15 +60,12 @@ const AttendanceButton: React.FC<AttendanceButtonProps> = ({
     );
 };
 
-
-// --- Main Attendance Page Component ---
 const AttendancePage: React.FC = () => {
     const { streamId } = useParams<{ streamId: string }>();
     const queryClient = useQueryClient();
     const [weekOffset, setWeekOffset] = useState<number>(0);
     const [mutatingEntryKey, setMutatingEntryKey] = useState<string | null>(null);
 
-    // --- Fetch Stream Details (for start date) ---
     const { data: streamDetails, isLoading: isLoadingStream } = useQuery<StreamDetailed, Error>({
         queryKey: ['stream', streamId],
         queryFn: () => streamService.getStreamDetails(streamId!),
@@ -86,7 +74,6 @@ const AttendancePage: React.FC = () => {
     });
     const streamStartDate = useMemo(() => streamDetails?.streamStartDate ? startOfWeek(parseISO(streamDetails.streamStartDate), { weekStartsOn: 1 }) : null, [streamDetails]);
 
-    // --- Effect to set initial week offset ---
     useEffect(() => {
         if (streamStartDate) {
             const offset = differenceInWeeks(
@@ -97,11 +84,9 @@ const AttendancePage: React.FC = () => {
         }
     }, [streamStartDate]);
 
-     // --- Calculate current week ---
      const currentWeekStart = useMemo(() => streamStartDate ? addDays(streamStartDate, weekOffset * 7) : null, [streamStartDate, weekOffset]);
      const currentWeekEnd = useMemo(() => currentWeekStart ? endOfWeek(currentWeekStart, { weekStartsOn: 1 }) : null, [currentWeekStart]);
  
-     // --- Fetch Weekly Attendance View Data ---
      const queryKey = ['weeklyAttendanceView', streamId, currentWeekStart ? format(currentWeekStart, 'yyyy-MM-dd') : ''];
      const { data: weekAttendance = [], isLoading: isLoadingWeek, error } = useQuery<WeeklyAttendanceViewEntry[], Error>({
          queryKey: queryKey,
@@ -112,35 +97,21 @@ const AttendancePage: React.FC = () => {
              return await attendanceService.getWeeklyAttendanceView(streamId, startDateStr, endDateStr);
          },
          enabled: !!streamId && !!currentWeekStart && !!currentWeekEnd && !isLoadingStream,
-         staleTime: 1000 * 30, // Shorter stale time for attendance
-         refetchOnWindowFocus: true, // Maybe refetch attendance more often
+         staleTime: 1000 * 30,
+         refetchOnWindowFocus: true,
      });
 
-    // // --- Derive Subjects for Bulk Entry ---
-    // const subjectsForBulk = useMemo(() => {
-    //     const subjectMap = new Map<string, { name: string; code: string | null }>();
-    //     weekAttendance.forEach(entry => {
-    //         if (!subjectMap.has(entry.subjectName)) {
-    //             subjectMap.set(entry.subjectName, { name: entry.subjectName, code: entry.courseCode || null });
-    //         }
-    //     });
-    //     return Array.from(subjectMap.values()).sort((a, b) => a.name.localeCompare(b.name));
-    // }, [weekAttendance]);
-
-    // --- Mark Attendance Mutation ---
-    const markAttendanceMutation = useMutation<AttendanceRecordOutput, Error, MarkAttendanceInput>({
+     const markAttendanceMutation = useMutation<AttendanceRecordOutput, Error, MarkAttendanceInput>({
         mutationFn: attendanceService.markAttendance,
         onSuccess: (data, variables) => {
             toast.success(`Attendance updated for ${variables.subjectName}`);
-            queryClient.invalidateQueries({ queryKey: queryKey }); // Invalidate current week view
+            queryClient.invalidateQueries({ queryKey: queryKey });
             queryClient.invalidateQueries({ queryKey: ['streamAnalytics', streamId] });
-            queryClient.invalidateQueries({ queryKey: ['subjectStats', streamId] }); // Maybe remove if covered by streamAnalytics
+            queryClient.invalidateQueries({ queryKey: ['subjectStats', streamId] });
         },
         onError: (error) => { toast.error(`Update failed: ${error.message}`); },
         onSettled: () => { setMutatingEntryKey(null); }
     });
-
-    // --- Handlers ---
 
     const goToPreviousWeek = () => { setWeekOffset(prev => Math.max(0, prev - 1)); };
     const goToNextWeek = () => setWeekOffset(prev => prev + 1);
@@ -151,7 +122,6 @@ const AttendancePage: React.FC = () => {
          } else { setWeekOffset(0); }
     };
 
-    // --- Group Data ---
     const groupedData = useMemo((): { [key: number]: { date: Date; entries: WeeklyAttendanceViewEntry[] } } => {
         if (!weekAttendance || !currentWeekStart || !currentWeekEnd) return {};
         const groups: { [key: number]: { date: Date; entries: WeeklyAttendanceViewEntry[] } } = {};
@@ -159,7 +129,6 @@ const AttendancePage: React.FC = () => {
         daysInWeek.forEach((day: Date) => {
             const dayOfWeek = day.getDay() === 0 ? 7 : day.getDay();
             const entriesForDay = weekAttendance.filter((entry: WeeklyAttendanceViewEntry) => isSameDay(parseISO(entry.date), day));
-            // Only add day if there are entries for it
             if (entriesForDay.length > 0) {
                 groups[dayOfWeek] = {
                     date: day,
@@ -170,15 +139,12 @@ const AttendancePage: React.FC = () => {
         return groups;
     }, [weekAttendance, currentWeekStart, currentWeekEnd]);
 
-    // --- Loading State ---
     const isLoading = isLoadingStream || isLoadingWeek;
 
-    // --- Render ---
     const weekDaysMap = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
     return (
         <div className="space-y-8">
-            {/* Header & Navigation */}
             <div className="flex flex-col sm:flex-row justify-between items-center gap-4 border-b pb-4">
                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Mark Weekly Attendance</h1>
                 <div className="flex items-center space-x-2">
@@ -188,14 +154,12 @@ const AttendancePage: React.FC = () => {
                 </div>
             </div>
 
-            {/* Week Info */}
             {currentWeekStart && currentWeekEnd && (
                  <div className="text-center text-lg font-semibold text-gray-700">
                     Week {weekOffset + 1}: {format(currentWeekStart, 'MMM dd')} - {format(currentWeekEnd, 'MMM dd, yyyy')}
                 </div>
             )}
 
-            {/* Loading / Error / Content */}
             {isLoading && <div className="text-center py-10 text-gray-500 flex justify-center items-center"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading attendance data...</div>}
             {!isLoading && error && <p className="text-center text-red-500 py-10">Error loading data: {error.message}</p>}
             {!isLoading && !error && Object.keys(groupedData).length === 0 && ( <p className="text-center text-gray-500 py-10 italic">No classes scheduled or replaced for this week.</p> )}
@@ -213,7 +177,6 @@ const AttendancePage: React.FC = () => {
                                     <div key={`${entry.subjectName}-${entry.startTime || index}-${entry.isReplacement}`} className="border-b border-gray-100 pb-3 last:border-b-0 last:pb-0">
                                         <div className="flex justify-between items-start mb-1">
                                             <div>
-                                                {/* Indicate if it's a replacement */}
                                                 {entry.isReplacement && (
                                                     <span className="block text-xs text-blue-600 font-medium flex items-center">
                                                         <Repeat size={12} className="mr-1"/> Replacement
@@ -223,7 +186,6 @@ const AttendancePage: React.FC = () => {
                                                     {entry.subjectName}
                                                 </p>
                                                 {entry.courseCode && <p className="text-xs text-gray-500">{entry.courseCode}</p>}
-                                                {/* Show what was replaced */}
                                                 {entry.isReplacement && entry.originalSubjectName && (
                                                     <p className="text-xs text-gray-500 italic">(Replaced: {entry.originalSubjectName})</p>
                                                 )}
@@ -232,9 +194,8 @@ const AttendancePage: React.FC = () => {
                                                 {entry.startTime || '--:--'} - {entry.endTime || '--:--'}
                                             </p>
                                         </div>
-                                        {/* Use simplified AttendanceButton */}
                                         <AttendanceButton
-                                            viewEntry={entry} // Pass the whole entry
+                                            viewEntry={entry}
                                             streamId={streamId!}
                                             currentStatus={entry.status}
                                             mutation={markAttendanceMutation}
@@ -249,7 +210,6 @@ const AttendancePage: React.FC = () => {
                 </div>
             )}
 
-            {/* Legend */}
             <div className="mt-8 pt-4 border-t">
                  <h3 className="text-sm font-semibold mb-2 text-gray-600">Legend:</h3>
                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-700">

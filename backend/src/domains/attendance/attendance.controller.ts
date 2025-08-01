@@ -2,7 +2,6 @@ import { Request, Response, NextFunction } from 'express';
 import { attendanceService } from './attendance.service';
 import { MarkAttendanceInput, BulkAttendanceInput, CancelClassInput, ReplaceClassInput } from './attendance.dto';
 import { ParsedQs } from 'qs';
-import { z } from 'zod';
 import { AuthenticatedUser } from '@/middleware/auth.middleware';
 
 export const attendanceController = {
@@ -72,7 +71,7 @@ export const attendanceController = {
 
     async handleReplaceClassGlobally(req: Request<{}, {}, ReplaceClassInput>, res: Response, next: NextFunction) {
         try {
-            const adminUserId = (req.user as AuthenticatedUser).id; // Assert user type
+            const adminUserId = (req.user as AuthenticatedUser).id;
             if (!adminUserId) throw new Error("Authentication error");
             const result = await attendanceService.replaceClassGlobally(req.body, adminUserId);
             res.status(200).json({ status: 'success', data: result });
@@ -89,7 +88,7 @@ export const attendanceController = {
         try {
             const user = req.user as AuthenticatedUser;
             if (!user?.id) throw new Error("Authentication error");
-            const userId = user.id; // Logged-in user requesting their view
+            const userId = user.id;
             const streamId = req.params.streamId;
             const { startDate, endDate } = req.query as { startDate: string, endDate: string };
 

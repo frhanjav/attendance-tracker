@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { streamService, StreamBasic } from '../services/stream.service';
 import { Link } from 'react-router-dom';
-import { Plus, LogIn, ArrowRight, Users, Loader2, Archive } from 'lucide-react';
+import { Plus, LogIn, ArrowRight, Loader2, Archive } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import {
     Card,
@@ -26,7 +26,6 @@ const DashboardPage: React.FC = () => {
         data: streams,
         isLoading,
         error,
-        refetch,
     } = useQuery<StreamBasic[], Error>({
         queryKey: ['myStreamsDashboard', showArchived],
         queryFn: () => streamService.getMyStreams(showArchived),

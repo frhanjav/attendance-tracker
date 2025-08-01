@@ -1,14 +1,12 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { useQuery, useMutation, useQueryClient, UseMutationResult } from '@tanstack/react-query'; // Import UseMutationResult
-import { timetableService, TimetableOutput } from '../services/timetable.service'; // Import types from timetable service
+import { useQuery, useMutation, useQueryClient, UseMutationResult } from '@tanstack/react-query';
+import { timetableService, TimetableOutput } from '../services/timetable.service';
 import {
     attendanceService,
-    WeeklyAttendanceViewEntry, // Use the attendance view type
+    WeeklyAttendanceViewEntry,
     AttendanceStatus,
     ReplaceClassInput,
     CancelClassInput,
-    AttendanceRecordOutput, // Needed for mutation result type
-    MarkAttendanceInput // Needed for mutation input type
 } from '../services/attendance.service';
 import { format, addDays, subDays, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, parseISO } from 'date-fns';
 import { Button } from '../components/ui/button';
@@ -16,8 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "../components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Label } from '../components/ui/label';
-import { Input } from '../components/ui/input';
-import { ArrowLeft, ArrowRight, XCircle, Repeat, Loader2 , Info } from 'lucide-react';
+import { ArrowLeft, ArrowRight, XCircle, Repeat, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface TimetableViewerProps {
@@ -25,12 +22,10 @@ interface TimetableViewerProps {
     isAdmin: boolean;
 }
 
-interface GroupedViewData { // Renamed from GroupedScheduleData
-    [dayOfWeek: number]: { date: Date; entries: WeeklyAttendanceViewEntry[] }; // Use WeeklyAttendanceViewEntry
+interface GroupedViewData {
+    [dayOfWeek: number]: { date: Date; entries: WeeklyAttendanceViewEntry[] };
 }
 
-
-// Type for subject dropdown in replace modal
 interface SubjectOption {
     name: string;
     code: string | null;
@@ -43,64 +38,59 @@ const TimetableViewer: React.FC<TimetableViewerProps> = ({ streamId, isAdmin }) 
 
     const [isReplaceModalOpen, setIsReplaceModalOpen] = useState(false);
     const [entryToReplace, setEntryToReplace] = useState<WeeklyAttendanceViewEntry | null>(null);
-    const [replacementSubjectName, setReplacementSubjectName] = useState(''); // Store just the name
+    const [replacementSubjectName, setReplacementSubjectName] = useState('');
 
     const [isCancelConfirmOpen, setIsCancelConfirmOpen] = useState(false);
     const [entryToCancel, setEntryToCancel] = useState<WeeklyAttendanceViewEntry | null>(null);
 
     const currentWeekEnd = useMemo(() => endOfWeek(currentWeekStart, { weekStartsOn: 1 }), [currentWeekStart]);
 
-    // --- Fetch Weekly ATTENDANCE View Data ---
-    // This query now fetches the combined schedule + status + replacement info
-    const queryKey = ['weeklyAttendanceView', streamId, format(currentWeekStart, 'yyyy-MM-dd')]; // Changed query key
+    const queryKey = ['weeklyAttendanceView', streamId, format(currentWeekStart, 'yyyy-MM-dd')];
     const { data: weekAttendance = [], isLoading, error, isFetching } = useQuery<WeeklyAttendanceViewEntry[], Error>({
         queryKey: queryKey,
         queryFn: async () => {
             const startDateStr = format(currentWeekStart, 'yyyy-MM-dd');
             const endDateStr = format(currentWeekEnd, 'yyyy-MM-dd');
-            // Call the attendance service function
             return await attendanceService.getWeeklyAttendanceView(streamId, startDateStr, endDateStr);
         },
-        enabled: !!streamId && !!currentWeekStart && !!currentWeekEnd, // Enable when dates are ready
-        staleTime: 1000 * 60 * 1, // Keep potentially shorter stale time
+        enabled: !!streamId && !!currentWeekStart && !!currentWeekEnd,
+        staleTime: 1000 * 60 * 1,
         refetchOnWindowFocus: true,
     });
 
-    // --- Fetch Active Timetable for Subjects (only when replace modal opens) ---
     const { data: activeTimetable } = useQuery<TimetableOutput | null, Error>({
         queryKey: ['activeTimetable', streamId, format(currentWeekStart, 'yyyy-MM-dd')],
         queryFn: () => {
             if (!currentWeekStart) return null;
             return timetableService.getActiveTimetableForDate(streamId, format(currentWeekStart, 'yyyy-MM-dd'));
         },
-        enabled: !!streamId && isReplaceModalOpen, // Use isReplaceModalOpen state variable
-        staleTime: 1000 * 60 * 10, // Cache for 10 mins while modal might be open
-        refetchOnWindowFocus: false, // Don't refetch just on focus
+        enabled: !!streamId && isReplaceModalOpen,
+        staleTime: 1000 * 60 * 10,
+        refetchOnWindowFocus: false,
     });
 
     const availableReplacementSubjects = useMemo((): SubjectOption[] => {
         if (!activeTimetable?.entries || !entryToReplace) return [];
         const subjects = activeTimetable.entries
-            .filter(entry => entry.subjectName !== entryToReplace.subjectName) // Exclude current subject
+            .filter(entry => entry.subjectName !== entryToReplace.subjectName)
             .map(entry => ({ name: entry.subjectName, code: entry.courseCode || null }));
         return Array.from(new Map(subjects.map(s => [`${s.name}::${s.code}`, s])).values())
                .sort((a, b) => a.name.localeCompare(b.name));
     }, [activeTimetable, entryToReplace]);
 
-    // --- Mutations ---
-    const cancelClassMutation = useMutation<unknown, Error, CancelClassInput>({ // Use correct input type
+    const cancelClassMutation = useMutation<unknown, Error, CancelClassInput>({ 
         mutationFn: attendanceService.cancelClassGlobally,
-        onSuccess: (data: any) => { // Use 'any' or define specific success type if needed
+        onSuccess: (data: any) => {
             toast.success(data?.message || "Class cancelled for all students.");
             queryClient.invalidateQueries({ queryKey: queryKey });
             queryClient.invalidateQueries({ queryKey: ['attendanceWeek', streamId] });
             queryClient.invalidateQueries({ queryKey: ['streamAnalytics', streamId] });
         },
         onError: (err: Error) => toast.error(`Failed to cancel: ${err.message}`),
-        onSettled: () => { setMutatingEntryKey(null); setIsCancelConfirmOpen(false); setEntryToCancel(null); } // Close confirm modal too
+        onSettled: () => { setMutatingEntryKey(null); setIsCancelConfirmOpen(false); setEntryToCancel(null); }
     });
 
-    const replaceClassMutation = useMutation<unknown, Error, ReplaceClassInput>({ // Use correct input type
+    const replaceClassMutation = useMutation<unknown, Error, ReplaceClassInput>({
          mutationFn: attendanceService.replaceClassGlobally,
          onSuccess: (data: any) => {
             toast.success(data?.message || "Class replaced successfully.");
@@ -113,7 +103,6 @@ const TimetableViewer: React.FC<TimetableViewerProps> = ({ streamId, isAdmin }) 
         onSettled: () => setMutatingEntryKey(null),
     });
 
-    // --- Handlers ---
     const goToPreviousWeek = () => setCurrentWeekStart(prev => subDays(prev, 7));
     const goToNextWeek = () => setCurrentWeekStart(prev => addDays(prev, 7));
 
@@ -125,18 +114,18 @@ const TimetableViewer: React.FC<TimetableViewerProps> = ({ streamId, isAdmin }) 
 
     const handleConfirmCancel = () => {
         if (!entryToCancel || !streamId || cancelClassMutation.isPending) return;
-        const entryKey = `${entryToCancel.date}_${entryToCancel.subjectName}_${entryToCancel.startTime || 'nostart'}_${entryToCancel.isReplacement}`; // Make key more unique
+        const entryKey = `${entryToCancel.date}_${entryToCancel.subjectName}_${entryToCancel.startTime || 'nostart'}_${entryToCancel.isReplacement}`;
         setMutatingEntryKey(entryKey);
         cancelClassMutation.mutate({
             streamId,
             classDate: entryToCancel.date,
-            subjectName: entryToCancel.isReplacement ? entryToCancel.originalSubjectName! : entryToCancel.subjectName, // Use original name if cancelling a replacement's slot? Or current name? Let's use current.
+            subjectName: entryToCancel.isReplacement ? entryToCancel.originalSubjectName! : entryToCancel.subjectName,
             startTime: entryToCancel.startTime
         });
     };
 
     const openReplaceModal = (entry: WeeklyAttendanceViewEntry) => {
-        if (!isAdmin || entry.isReplacement) return; // Don't allow replacing a replacement
+        if (!isAdmin || entry.isReplacement) return;
         setEntryToReplace(entry);
         setReplacementSubjectName('');
         setIsReplaceModalOpen(true);
@@ -154,7 +143,7 @@ const TimetableViewer: React.FC<TimetableViewerProps> = ({ streamId, isAdmin }) 
         const payload: ReplaceClassInput = {
             streamId,
             classDate: entryToReplace.date,
-            originalSubjectName: entryToReplace.subjectName, // Original is the one being replaced
+            originalSubjectName: entryToReplace.subjectName,
             originalStartTime: entryToReplace.startTime,
             replacementSubjectName: replacementSubjectName,
             replacementCourseCode: selectedSubjectData?.code,
@@ -162,16 +151,13 @@ const TimetableViewer: React.FC<TimetableViewerProps> = ({ streamId, isAdmin }) 
         replaceClassMutation.mutate(payload);
     };
 
-    // --- Group Data ---
-    const groupedData = useMemo((): GroupedViewData => { // Use GroupedViewData type
+    const groupedData = useMemo((): GroupedViewData => {
         if (!weekAttendance) return {};
         const groups: GroupedViewData = {};
         const daysInWeek = eachDayOfInterval({ start: currentWeekStart, end: currentWeekEnd });
         daysInWeek.forEach((day: Date) => {
             const dayOfWeek = day.getDay() === 0 ? 7 : day.getDay();
-            // Filter entries from the fetched attendance view data
             const entriesForDay = weekAttendance.filter((entry: WeeklyAttendanceViewEntry) => isSameDay(parseISO(entry.date), day));
-            // Add day only if it has entries
             if (entriesForDay.length > 0) {
                 groups[dayOfWeek] = {
                     date: day,
@@ -214,17 +200,14 @@ const TimetableViewer: React.FC<TimetableViewerProps> = ({ streamId, isAdmin }) 
                             </CardHeader>
                             <CardContent className="p-3 space-y-2 flex-grow">
                                 {groupedData[dayOfWeek].entries.length === 0 && <p className="text-xs text-gray-400 italic text-center py-2">No classes</p>}
-                                {groupedData[dayOfWeek].entries.map((entry) => { // entry is WeeklyAttendanceViewEntry
+                                {groupedData[dayOfWeek].entries.map((entry) => {
                                     const entryKey = `${entry.date}_${entry.subjectName}_${entry.startTime || 'nostart'}_${entry.isReplacement}`;
                                     const isMutatingThis = mutatingEntryKey === entryKey;
-                                    // Determine display status based on fetched data
                                     const isCancelled = entry.status === AttendanceStatus.CANCELLED;
                                     const isReplacement = entry.isReplacement;
-
-                                    // Determine border color based on status/type
-                                    let borderColor = 'border-blue-300'; // Default SCHEDULED
+                                    let borderColor = 'border-blue-300';
                                     if (isCancelled) borderColor = 'border-red-300';
-                                    if (isReplacement) borderColor = 'border-green-400'; // Use different color for replacement
+                                    if (isReplacement) borderColor = 'border-green-400';
 
                                     return (
                                         <div key={entryKey} className={`border-l-4 ${borderColor} pl-2 py-1 transition-colors duration-200 ${isCancelled ? 'bg-red-50/50 opacity-70' : isReplacement ? 'bg-green-50/50' : ''}`}>
@@ -299,7 +282,7 @@ const TimetableViewer: React.FC<TimetableViewerProps> = ({ streamId, isAdmin }) 
              </Dialog>
 
              {/* Replace Class Modal */}
-             <Dialog open={isReplaceModalOpen} onOpenChange={handleCloseReplaceModal}> {/* Use correct handler */}
+             <Dialog open={isReplaceModalOpen} onOpenChange={handleCloseReplaceModal}>
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>Replace Class</DialogTitle>
@@ -330,7 +313,6 @@ const TimetableViewer: React.FC<TimetableViewerProps> = ({ streamId, isAdmin }) 
                                 </SelectContent>
                             </Select>
                          </div>
-                         {/* Optional: Add inputs for replacement time if needed */}
                          <DialogFooter>
                             <Button type="button" variant="ghost" onClick={handleCloseReplaceModal} disabled={replaceClassMutation.isPending}>Cancel</Button>
                             <Button type="submit" disabled={!replacementSubjectName || replaceClassMutation.isPending}>

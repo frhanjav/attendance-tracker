@@ -36,7 +36,6 @@ router.get('/health', (req: Request, res: Response): void => {
 });
 
 // --- Google OAuth Routes ---
-// Route to initiate Google authentication
 router.get('/auth/google', (req, res, next) => {
     // Add logging
     console.log('Backend: Handling GET /auth/google');
@@ -44,8 +43,6 @@ router.get('/auth/google', (req, res, next) => {
 });
 
 router.get('/auth/google/callback', (req, res, next) => {
-    // Add logging
-    console.log('Backend: Handling GET /auth/google/callback - invoking passport.authenticate');
     passport.authenticate('google', {
         failureRedirect: `${config.frontendUrl}/landing?error=google-auth-failed`,
         session: false,
@@ -69,7 +66,6 @@ router.get('/auth/google/callback', (req, res, next) => {
             const token = jwt.sign(payload, config.jwtSecret, {
                 expiresIn: config.jwtExpiresInSeconds,
             });
-            console.log('[Auth Callback] Setting authToken cookie...');
             res.cookie('authToken', token, {
                 httpOnly: true,
                 secure: config.nodeEnv === 'production',
@@ -77,37 +73,31 @@ router.get('/auth/google/callback', (req, res, next) => {
                 sameSite: config.nodeEnv === 'production' ? 'lax' : undefined,
                 path: '/',
             });
-            console.log('[Auth Callback] Redirecting to frontend dashboard...');
             res.redirect(`${config.frontendUrl}/dashboard`);
         } catch (error) {
-            console.error('[Auth Callback] Error generating JWT or setting cookie:', error);
-            next(error); // Pass error to global handler
+            next(error);
         }
     });
 });
 
 // --- Logout Route ---
 router.post('/auth/logout', (req: Request, res: Response, next: NextFunction) => {
-    console.log('[Auth Logout] Received logout request');
     try {
-        // Clear the HttpOnly cookie by setting it with an expired date
         res.cookie('authToken', '', {
-            // Set value to empty string
             httpOnly: true,
-            expires: new Date(0), // Set expiry date to the past
+            expires: new Date(0),
             secure: config.nodeEnv === 'production',
             sameSite: config.nodeEnv === 'production' ? 'lax' : undefined,
             path: '/',
         });
         res.status(200).json({ status: 'success', message: 'Logged out successfully' });
     } catch (error) {
-        // Pass any unexpected errors to the global handler
         next(error);
     }
 });
 
 // --- Protected Routes (Require Authentication) ---
-router.use(protect); // Apply auth middleware to all subsequent routes
+router.use(protect);
 
 // --- User Routes ---
 router.get('/users/me', userController.getMe);
@@ -198,7 +188,7 @@ router.post(
     '/attendance/cancel',
     validateRequest(CancelClassSchema),
     attendanceController.handleCancelClassGlobally,
-); // Added validation
+);
 
 // Replace Class Route (Admin)
 router.post('/attendance/replace', validateRequest(ReplaceClassSchema), attendanceController.handleReplaceClassGlobally);
@@ -220,14 +210,12 @@ router.get(
 
 // --- Analytics Routes ---
 router.get(
-    // Get Stream Stats
     '/analytics/streams/:streamId',
     validateRequest(z.object({ params: TimetableStreamParamsSchema })),
     analyticsController.handleGetStreamAnalytics,
 );
 
 router.post(
-    // Calculator
     '/analytics/calculator',
     validateRequest(AttendanceCalculatorInputSchema),
     analyticsController.handleCalculateProjection,
