@@ -2,9 +2,9 @@
 
 Manage your academic life seamlessly. Create timetables, track attendance percentage, calculate future needs, and stay organized – all in one place.
 
-<div align="center">
+<p align="center">
   <img src="https://media.frhn.me/timetable.gif" alt="Project Demo" width="500" />
-</div>
+</p>
 
 ## Tech Stack & Architecture
 
