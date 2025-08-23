@@ -178,7 +178,7 @@ const AttendancePage: React.FC = () => {
                                         <div className="flex justify-between items-start mb-1">
                                             <div>
                                                 {entry.isReplacement && (
-                                                    <span className="block text-xs text-blue-600 font-medium flex items-center">
+                                                    <span className="text-xs text-blue-600 font-medium flex items-center">
                                                         <Repeat size={12} className="mr-1"/> Replacement
                                                     </span>
                                                 )}
