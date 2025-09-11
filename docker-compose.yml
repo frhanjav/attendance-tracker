@@ -1,8 +1,5 @@
-version: '3.8' # You can remove this line if you got the warning
-
 services:
   postgres_db_dev:
-    # ... (no changes needed here) ...
     image: postgres:15-alpine
     container_name: attendance_postgres_dev
     environment:
@@ -27,22 +24,14 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    command: npx ts-node-dev --respawn --transpile-only src/server.ts # Use npx
+    command: npx ts-node-dev --respawn --transpile-only src/server.ts
     volumes:
-      # Mount source code directly for hot-reloading
       - ./backend/src:/app/src
       - ./backend/prisma:/app/prisma
-      # Mount config/package files needed by dev process
       - ./backend/package.json:/app/package.json
       - ./backend/package-lock.json:/app/package-lock.json
       - ./backend/tsconfig.json:/app/tsconfig.json
-      # --- IMPORTANT: Anonymous Volume for node_modules ---
-      # Use an anonymous volume ONLY for the node_modules directory inside the container.
-      # This tells Docker: "Persist node_modules within a container-managed volume,
-      # but DO NOT overwrite it with anything from the host".
-      # It uses the node_modules installed during the 'docker build' step.
       - /app/node_modules
-      # --- End Change ---
     ports:
       - "3001:3001"
     depends_on:
@@ -63,7 +52,6 @@ services:
       dockerfile: Dockerfile
     command: npm run dev -- --host 0.0.0.0 --port 5173
     volumes:
-      # Mount source code directly
       - ./frontend/src:/app/src
       - ./frontend/public:/app/public
       - ./frontend/index.html:/app/index.html
@@ -72,9 +60,7 @@ services:
       - ./frontend/package.json:/app/package.json
       - ./frontend/package-lock.json:/app/package-lock.json
       - ./frontend/tsconfig.json:/app/tsconfig.json
-      # --- Apply same anonymous volume trick for frontend ---
       - /app/node_modules
-      # --- End Change ---
     ports:
       - "5173:5173"
     depends_on:
@@ -86,11 +72,8 @@ services:
     tty: true
 
 volumes:
-  postgres_dev_data: # Keep named volume for DB data
+  postgres_dev_data:
     driver: local
-  # --- REMOVE Named volumes for node_modules ---
-  # backend_node_modules:
-  # frontend_node_modules:
 
 networks:
   attendance_dev_net:

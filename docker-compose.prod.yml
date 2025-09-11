@@ -1,48 +1,41 @@
 services:
   backend:
-    # Use the image URI pushed to Artifact Registry (replace placeholders!)
     image: ${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${AR_REPO_NAME}/attendance-backend:${IMAGE_TAG}
     platform: linux/amd64
     container_name: attendance_backend_prod
     restart: always
     env_file:
-      - .env.backend.prod # Load production variables
+      - .env.backend.prod
     networks:
       - attendance_prod_net
     expose:
-      - "3001" # Expose internally for nginx
+      - "3001"
     healthcheck:
         test: ["CMD-SHELL", "wget -q --spider http://localhost:3001/api/v1/health || exit 1"]
         interval: 30s
         timeout: 10s
         retries: 5
         start_period: 30s
-    # No ports needed if only accessed via proxy
 
   frontend:
-     # Use the image URI pushed to Artifact Registry (replace placeholders!)
     image: ${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${AR_REPO_NAME}/attendance-frontend:${IMAGE_TAG}
     container_name: attendance_frontend_prod
     restart: always
     networks:
       - attendance_prod_net
     expose:
-      - "80" # Expose Nginx internally for proxy
-    # No ports needed
+      - "80"
 
-  nginx: # Reverse Proxy
+  nginx:
     image: nginx:1.25-alpine
     platform: linux/amd64
     container_name: attendance_nginx_proxy
     restart: always
     ports:
-      # Map VM's public port 80 to container port 80
       - "80:80"
       - "443:443"
     volumes:
-      # Mount the reverse proxy config from the VM host
       - ./nginx.reverse-proxy.conf:/etc/nginx/conf.d/default.conf:ro
-      # Mount certificate files later if using HTTPS
       - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
       - frontend
