@@ -132,6 +132,8 @@ jobs:
             - name: Validate Prisma schema
               if: needs.detect-changes.outputs.backend-changed == 'true'
               working-directory: ./backend
+              env:
+                  DATABASE_URL: "postgresql://dummy:dummy@localhost:5432/dummy"
               run: |
                   echo "🔍 Validating Prisma schema..."
                   npx prisma validate
