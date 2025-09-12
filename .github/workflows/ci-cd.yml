@@ -129,6 +129,14 @@ jobs:
               working-directory: ./backend
               run: npm ci
 
+            - name: Validate Prisma schema
+              if: needs.detect-changes.outputs.backend-changed == 'true'
+              working-directory: ./backend
+              run: |
+                  echo "🔍 Validating Prisma schema..."
+                  npx prisma validate
+                  echo "✅ Prisma schema is valid"
+
             - name: Build backend
               if: needs.detect-changes.outputs.backend-changed == 'true'
               working-directory: ./backend
@@ -502,7 +510,29 @@ jobs:
                     exit 1
                   fi
 
-                  echo '🚀 Starting new containers...'
+                  echo '🗄️ Running database migrations...'
+                  # Since we use external Aiven database, run migrations directly
+                  echo '🔄 Running Prisma migrations...'
+                  if ! docker-compose -f $COMPOSE_FILE run --rm backend npx prisma migrate deploy; then
+                    echo '❌ Failed to run database migrations'
+                    echo '📋 Checking migration status...'
+                    docker-compose -f $COMPOSE_FILE run --rm backend npx prisma migrate status || true
+                    echo '📋 Recent backend logs:'
+                    docker-compose -f $COMPOSE_FILE logs backend --tail=20 || true
+                    exit 1
+                  fi
+
+                  echo '✅ Database migrations completed successfully!'
+
+                  echo '🌱 Running database seed (staging only)...'
+                  # Only seed in staging to avoid overwriting production data
+                  if [[ "${{ env.ENVIRONMENT }}" == "staging" ]]; then
+                    docker-compose -f $COMPOSE_FILE run --rm backend npx prisma db seed || echo '⚠️ Seeding skipped or failed (not critical)'
+                  else
+                    echo 'ℹ️ Skipping seed for production environment'
+                  fi
+
+                  echo '🚀 Starting all containers...'
                   if ! docker-compose -f $COMPOSE_FILE up -d; then
                     echo '❌ Failed to start containers'
                     exit 1
