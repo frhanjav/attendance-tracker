@@ -227,6 +227,11 @@ const LandingPage: React.FC = () => {
                                             Features
                                         </a>
                                     </li>
+                                    <li>
+                                        <a href="#" className="text-gray-400 hover:text-white">
+                                            Support
+                                        </a>
+                                    </li>
                                 </ul>
                             </div>
 
