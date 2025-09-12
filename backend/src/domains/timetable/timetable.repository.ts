@@ -94,6 +94,29 @@ export const timetableRepository = {
         return null;
     },
 
+    async findActiveTimetablesForDateRange(streamId: string, startDate: Date, endDate: Date): Promise<(Timetable & { entries: TimetableEntry[] })[]> {
+        const normalizedStartDate = normalizeDate(startDate);
+        const normalizedEndDate = normalizeDate(endDate);
+        
+        return prisma.timetable.findMany({
+            where: {
+                streamId: streamId,
+                OR: [
+                    {
+                        validFrom: { lte: normalizedEndDate },
+                        validUntil: { gte: normalizedStartDate }
+                    },
+                    {
+                        validFrom: { lte: normalizedEndDate },
+                        validUntil: null
+                    }
+                ]
+            },
+            include: { entries: true },
+            orderBy: { validFrom: 'asc' },
+        });
+    },
+
     async setEndDate(timetableId: string, endDate: Date): Promise<Timetable> {
         return prisma.timetable.update({
             where: { id: timetableId },

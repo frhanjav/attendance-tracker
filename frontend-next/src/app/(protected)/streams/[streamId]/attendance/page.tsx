@@ -151,8 +151,8 @@ export default function Attendance() {
             );
         },
         enabled: !!streamId && !!currentWeekStart && !!currentWeekEnd && !isLoadingStream,
-        staleTime: 1000 * 30,
-        refetchOnWindowFocus: true,
+        staleTime: 1000 * 60 * 5,
+        refetchOnWindowFocus: false,
     });
 
     const markAttendanceMutation = useMutation<AttendanceRecordOutput, Error, MarkAttendanceInput>({

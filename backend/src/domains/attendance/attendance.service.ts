@@ -87,16 +87,19 @@ export const attendanceService = {
         const endDate = normalizeDate(endDateStr);
         const finalViewEntries: WeeklyAttendanceViewEntry[] = [];
 
-        const weeklySchedule: TimetableScheduleEntry[] = await timetableService.getWeeklySchedule(streamId, startDateStr, endDateStr, userId);
+        const [weeklySchedule, attendanceData] = await Promise.all([
+            timetableService.getWeeklySchedule(streamId, startDateStr, endDateStr, userId),
+            attendanceRepository.getWeeklyAttendanceData(userId, streamId, startDate, endDate)
+        ]);
 
-        const userAttendanceRecords: AttendanceRecord[] = await attendanceRepository.findRecordsByUserAndDateRange(userId, streamId, startDate, endDate);
+        const { attendanceRecords: userAttendanceRecords, overrides } = attendanceData;
+
         const recordsMap = new Map<string, AttendanceRecord>();
         userAttendanceRecords.forEach((rec: AttendanceRecord) => {
             const key = `${formatDate(rec.classDate)}_${rec.subjectName}`;
             recordsMap.set(key, rec);
         });
 
-        const overrides = await attendanceRepository.findOverridesForWeek(streamId, startDate, endDate);
         const overrideMap = new Map<string, ClassOverride>();
         overrides.forEach(ov => {
             const key = `${formatDate(ov.classDate)}_${ov.originalSubjectName}_${ov.originalStartTime || 'no-start'}`;

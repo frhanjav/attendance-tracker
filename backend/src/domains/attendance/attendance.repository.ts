@@ -111,8 +111,29 @@ export const attendanceRepository = {
             where: {
                 streamId: streamId,
                 classDate: { gte: startDate, lte: endDate }
-            }
+            },
+            orderBy: { classDate: 'asc' }
         });
+    },
+
+    async getWeeklyAttendanceData(
+        userId: string,
+        streamId: string, 
+        startDate: Date, 
+        endDate: Date
+    ): Promise<{
+        attendanceRecords: AttendanceRecord[];
+        overrides: ClassOverride[];
+    }> {
+        const [attendanceRecords, overrides] = await Promise.all([
+            this.findRecordsByUserAndDateRange(userId, streamId, startDate, endDate),
+            this.findOverridesForWeek(streamId, startDate, endDate)
+        ]);
+
+        return {
+            attendanceRecords,
+            overrides
+        };
     },
 
     async getCancelledClassKeys(streamId: string, startDate: Date, endDate: Date): Promise<Set<string>> {

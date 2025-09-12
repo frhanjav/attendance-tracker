@@ -146,18 +146,24 @@ export const timetableService = {
         const endDate = normalizeDate(endDateStr);
         const schedule: WeeklyScheduleEntry[] = [];
 
+        const relevantTimetables = await timetableRepository.findActiveTimetablesForDateRange(
+            streamId,
+            startDate,
+            endDate,
+        );
+
         const days = getDaysInInterval(startDate, endDate);
         for (const day of days) {
-            const activeTimetable = await timetableRepository.findActiveByStreamAndDate(
-                streamId,
-                day,
+            const activeTimetable = relevantTimetables.find((tt: Timetable & { entries: TimetableEntry[] }) => 
+                tt.validFrom <= day && 
+                (tt.validUntil === null || tt.validUntil >= day)
             );
 
             if (activeTimetable) {
                 const dayOfWeek = getISODayOfWeek(day);
                 activeTimetable.entries
-                    .filter((entry) => entry.dayOfWeek === dayOfWeek)
-                    .forEach((entry) => {
+                    .filter((entry: TimetableEntry) => entry.dayOfWeek === dayOfWeek)
+                    .forEach((entry: TimetableEntry) => {
                         const dateStr = formatDate(day);
                         schedule.push({
                             date: dateStr,

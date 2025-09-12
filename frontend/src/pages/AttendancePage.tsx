@@ -97,8 +97,8 @@ const AttendancePage: React.FC = () => {
              return await attendanceService.getWeeklyAttendanceView(streamId, startDateStr, endDateStr);
          },
          enabled: !!streamId && !!currentWeekStart && !!currentWeekEnd && !isLoadingStream,
-         staleTime: 1000 * 30,
-         refetchOnWindowFocus: true,
+         staleTime: 1000 * 60 * 5,
+         refetchOnWindowFocus: false,
      });
 
      const markAttendanceMutation = useMutation<AttendanceRecordOutput, Error, MarkAttendanceInput>({
@@ -112,6 +112,42 @@ const AttendancePage: React.FC = () => {
         onError: (error) => { toast.error(`Update failed: ${error.message}`); },
         onSettled: () => { setMutatingEntryKey(null); }
     });
+
+    useEffect(() => {
+        if (streamId && currentWeekStart && currentWeekEnd && streamStartDate) {
+            if (weekOffset < 20) {
+                const nextWeekStart = addDays(currentWeekStart, 7);
+                const nextWeekEnd = addDays(currentWeekEnd, 7);
+                const nextQueryKey = ['weeklyAttendanceView', streamId, format(nextWeekStart, 'yyyy-MM-dd')];
+                
+                queryClient.prefetchQuery({
+                    queryKey: nextQueryKey,
+                    queryFn: async () => {
+                        const startDateStr = format(nextWeekStart, 'yyyy-MM-dd');
+                        const endDateStr = format(nextWeekEnd, 'yyyy-MM-dd');
+                        return await attendanceService.getWeeklyAttendanceView(streamId, startDateStr, endDateStr);
+                    },
+                    staleTime: 1000 * 60 * 5,
+                });
+            }
+            
+            if (weekOffset > 0) {
+                const prevWeekStart = addDays(currentWeekStart, -7);
+                const prevWeekEnd = addDays(currentWeekEnd, -7);
+                const prevQueryKey = ['weeklyAttendanceView', streamId, format(prevWeekStart, 'yyyy-MM-dd')];
+                
+                queryClient.prefetchQuery({
+                    queryKey: prevQueryKey,
+                    queryFn: async () => {
+                        const startDateStr = format(prevWeekStart, 'yyyy-MM-dd');
+                        const endDateStr = format(prevWeekEnd, 'yyyy-MM-dd');
+                        return await attendanceService.getWeeklyAttendanceView(streamId, startDateStr, endDateStr);
+                    },
+                    staleTime: 1000 * 60 * 5,
+                });
+            }
+        }
+    }, [queryClient, streamId, currentWeekStart, currentWeekEnd, weekOffset, streamStartDate]);
 
     const goToPreviousWeek = () => { setWeekOffset(prev => Math.max(0, prev - 1)); };
     const goToNextWeek = () => setWeekOffset(prev => prev + 1);

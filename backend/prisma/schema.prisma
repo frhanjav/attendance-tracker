@@ -7,11 +7,10 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// --- Enums ---
 enum AttendanceStatus {
-  OCCURRED // Class happened, student attended
-  MISSED // Class happened, student did NOT attend (or default if no record)
-  CANCELLED // Class did not happen (globally cancelled by admin)
+  OCCURRED
+  MISSED
+  CANCELLED
 }
 
 enum OverrideType {
@@ -55,7 +54,6 @@ model Stream {
   @@index([isArchived])
 }
 
-// Join table for users and streams
 model StreamMembership {
   id       String   @id @default(cuid())
   userId   String
@@ -71,15 +69,14 @@ model StreamMembership {
   @@index([streamId])
 }
 
-// New table to store global overrides for specific class instances
 model ClassOverride {
   id                  String   @id @default(cuid())
   streamId            String
   classDate           DateTime
   originalSubjectName String
-  originalStartTime   String? // Optional: To identify specific slot if multiple per day
+  originalStartTime   String?
 
-  overrideType OverrideType // CANCELLED or REPLACED
+  overrideType OverrideType
 
   replacementSubjectName String?
   replacementCourseCode  String?
@@ -94,6 +91,7 @@ model ClassOverride {
 
   @@unique([streamId, classDate, originalSubjectName])
   @@index([streamId, classDate])
+  @@index([streamId, classDate, originalSubjectName], map: "override_stream_date_composite")
 }
 
 model Timetable {
@@ -109,6 +107,7 @@ model Timetable {
 
   @@index([streamId])
   @@index([validFrom])
+  @@index([streamId, validFrom, validUntil], map: "timetable_stream_date_range")
 }
 
 model TimetableEntry {
@@ -136,12 +135,6 @@ model AttendanceRecord {
   status      AttendanceStatus @default(MISSED)
   markedAt    DateTime         @updatedAt
 
-  // Optional: Track who marked it if needed (e.g., distinguishing admin actions)
-  // markedByUserId String?
-
-  // Optional: Add notes if needed later
-  // notes String?
-
   isReplacement       Boolean @default(false)
   originalSubjectName String?
   originalCourseCode  String?
@@ -150,12 +143,11 @@ model AttendanceRecord {
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   stream Stream @relation(fields: [streamId], references: [id], onDelete: Cascade)
-  // markedBy User? // If tracking who marked is needed
 
-  // Unique constraint: One status per user per class instance
   @@unique([userId, streamId, subjectName, classDate, isReplacement])
   @@index([userId, streamId, classDate, status])
   @@index([isReplacement])
+  @@index([streamId, classDate, userId], map: "attendance_stream_date_composite")
 }
 
 model BulkAttendanceEntry {
@@ -166,7 +158,7 @@ model BulkAttendanceEntry {
   courseCode       String?
   attendedClasses  Int
   totalHeldClasses Int?
-  calculationDate  DateTime @default(now()) // When this bulk entry was made/calculated
+  calculationDate  DateTime @default(now())
   startDate        DateTime
   endDate          DateTime
 

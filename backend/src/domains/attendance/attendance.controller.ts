@@ -93,6 +93,8 @@ export const attendanceController = {
             const { startDate, endDate } = req.query as { startDate: string, endDate: string };
 
             const weeklyView = await attendanceService.getWeeklyAttendanceView(streamId, startDate, endDate, userId);
+            
+            res.set('Cache-Control', 'private, max-age=300');
             res.status(200).json({ status: 'success', data: { attendanceView: weeklyView } });
         } catch (error) {
             next(error);
