@@ -1,12 +1,12 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { AlertTriangle, Archive, ArchiveRestore, BarChart3, Clock, Loader2, LogOut, Users } from 'lucide-react';
 import React, { useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { streamService, StreamDetailed } from '../services/stream.service';
-import { Users, Clock, BarChart3, LogOut, Archive, ArchiveRestore, Loader2, AlertTriangle } from 'lucide-react';
-import { useAuth } from '../hooks/useAuth';
-import { Button } from '../components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription} from "../components/ui/dialog";
 import toast from 'react-hot-toast';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Button } from '../components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
+import { useAuth } from '../hooks/useAuth';
+import { StreamDetailed, streamService } from '../services/stream.service';
 
 const StreamPage: React.FC = () => {
     const { streamId } = useParams<{ streamId: string }>();
@@ -30,6 +30,7 @@ const StreamPage: React.FC = () => {
         onSuccess: (data) => {
             toast.success(data.message);
             queryClient.invalidateQueries({ queryKey: ['myStreams'] });
+            queryClient.invalidateQueries({ queryKey: ['myStreamsDashboard'] });
             navigate('/dashboard');
         },
         onError: (err: Error) => toast.error(`Leave failed: ${err.message}`),
@@ -41,6 +42,7 @@ const StreamPage: React.FC = () => {
         onSuccess: (updatedStreamData) => {
             toast.success(`Stream "${updatedStreamData.name}" archived.`);
             queryClient.invalidateQueries({ queryKey: ['myStreams'] });
+            queryClient.invalidateQueries({ queryKey: ['myStreamsDashboard'] });
             queryClient.invalidateQueries({ queryKey: ['stream', streamId] });
         },
         onError: (err: Error) => toast.error(`Archive failed: ${err.message}`),
@@ -52,6 +54,7 @@ const StreamPage: React.FC = () => {
         onSuccess: (updatedStreamData) => {
             toast.success(`Stream "${updatedStreamData.name}" unarchived.`);
             queryClient.invalidateQueries({ queryKey: ['myStreams'] });
+            queryClient.invalidateQueries({ queryKey: ['myStreamsDashboard'] });
             queryClient.invalidateQueries({ queryKey: ['stream', streamId] });
         },
         onError: (err: Error) => toast.error(`Unarchive failed: ${err.message}`),

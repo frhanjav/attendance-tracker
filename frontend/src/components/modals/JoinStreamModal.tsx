@@ -1,22 +1,22 @@
-import React, { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { Loader2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import toast from 'react-hot-toast';
 import { z } from 'zod';
-import { streamService } from '../../services/stream.service';
 import { Button } from '../../components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../../components/ui/dialog";
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogDescription,
-    DialogFooter,
-} from "../../components/ui/dialog";
-import toast from 'react-hot-toast';
-import { Loader2 } from 'lucide-react';
+import { streamService } from '../../services/stream.service';
 
 const joinStreamSchema = z.object({
     streamCode: z.string().min(5, { message: 'Stream code seems too short' })
@@ -44,6 +44,7 @@ const JoinStreamModal: React.FC<JoinStreamModalProps> = ({ isOpen, onClose }) =>
         onSuccess: (data) => {
             toast.success(`Successfully joined stream "${data.name}"!`);
             queryClient.invalidateQueries({ queryKey: ['myStreams'] });
+            queryClient.invalidateQueries({ queryKey: ['myStreamsDashboard'] });
             handleClose();
         },
         onError: (error: Error) => {
