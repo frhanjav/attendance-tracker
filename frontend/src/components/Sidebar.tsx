@@ -1,24 +1,24 @@
+import { useQuery } from '@tanstack/react-query';
 import React, { useState } from 'react';
 import { Link, NavLink, useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
 import { Button } from '../components/ui/button';
 import { ScrollArea } from '../components/ui/scroll-area';
-import { streamService, StreamBasic } from '../services/stream.service';
+import { StreamBasic, streamService } from '../services/stream.service';
 
 import {
-    Accordion,
-    AccordionContent,
-    AccordionItem,
-    AccordionTrigger,
-} from '../components/ui/accordion';
-import {
-    LayoutDashboard,
-    PlusCircle,
-    LogIn,
-    BookOpen,
-    CheckSquare,
-    BarChartHorizontal,
+  BarChartHorizontal,
+  BookOpen,
+  CheckSquare,
+  LayoutDashboard,
+  LogIn,
+  PlusCircle,
 } from 'lucide-react';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '../components/ui/accordion';
 import useUIStore from '../stores/uiStore';
 
 const Sidebar: React.FC = () => {
@@ -26,20 +26,20 @@ const Sidebar: React.FC = () => {
     const openJoinStreamModal = useUIStore((state) => state.openJoinStreamModal);
 
     const { streamId: activeStreamId } = useParams<{ streamId?: string }>();
-    const [openAccordionItem, setOpenAccordionItem] = useState<string | undefined>(activeStreamId);
+    const [openAccordionItem, setOpenAccordionItem] = useState<string>(activeStreamId || '');
 
     const { data: streams, isLoading, error } = useQuery<StreamBasic[], Error>({
-        queryKey: ['myStreams', false],
+        queryKey: ['myStreams', 'sidebar', false],
         queryFn: () => streamService.getMyStreams(false),
-        staleTime: 1000 * 60 * 10, // Cache for 10 minutes
+        staleTime: 1000 * 60 * 30, // Cache user data for 30 minutes
     });
 
     React.useEffect(() => {
-        setOpenAccordionItem(activeStreamId);
+        setOpenAccordionItem(activeStreamId || '');
     }, [activeStreamId]);
 
     const handleAccordionChange = (value: string) => {
-        setOpenAccordionItem(value === openAccordionItem ? undefined : value);
+        setOpenAccordionItem(value === openAccordionItem ? '' : value);
     };
 
     return (
