@@ -103,8 +103,8 @@ jobs:
                   echo "should-deploy=$SHOULD_DEPLOY" >> $GITHUB_OUTPUT
                   echo "deploy-reason=$DEPLOY_REASON" >> $GITHUB_OUTPUT
 
-                  echo "🔍 Deployment decision: $SHOULD_DEPLOY"
-                  echo "📝 Reason: $DEPLOY_REASON"
+                  echo " Deployment decision: $SHOULD_DEPLOY"
+                  echo " Reason: $DEPLOY_REASON"
 
     # Build Check (No tests yet - placeholder for future)
     build-check:
@@ -135,9 +135,9 @@ jobs:
               env:
                   DATABASE_URL: "postgresql://dummy:dummy@localhost:5432/dummy"
               run: |
-                  echo "🔍 Validating Prisma schema..."
+                  echo " Validating Prisma schema..."
                   npx prisma validate
-                  echo "✅ Prisma schema is valid"
+                  echo " Prisma schema is valid"
 
             - name: Build backend
               if: needs.detect-changes.outputs.backend-changed == 'true'
@@ -194,16 +194,16 @@ jobs:
             - name: Show scan summary
               if: always()
               run: |
-                  echo "🔍 Security scan completed"
+                  echo " Security scan completed"
                   if [ -f "trivy-results.sarif" ]; then
-                    echo "✅ SARIF report generated successfully"
+                    echo " SARIF report generated successfully"
                     # Show a summary of findings if any
                     if command -v jq &> /dev/null; then
                       ISSUES=$(jq '.runs[0].results | length' trivy-results.sarif 2>/dev/null || echo "0")
-                      echo "📊 Found $ISSUES security issues"
+                      echo " Found $ISSUES security issues"
                     fi
                   else
-                    echo "❌ SARIF report not found"
+                    echo " SARIF report not found"
                   fi
 
     # Build and Push Docker Images
@@ -266,9 +266,9 @@ jobs:
         steps:
             - name: Display deployment info
               run: |
-                  echo "🚀 Deploying to ${{ env.ENVIRONMENT }}"
-                  echo "📝 Deploy reason: ${{ needs.detect-changes.outputs.deploy-reason }}"
-                  echo "🔍 Build job result: ${{ needs.build-and-push.result }}"
+                  echo " Deploying to ${{ env.ENVIRONMENT }}"
+                  echo " Deploy reason: ${{ needs.detect-changes.outputs.deploy-reason }}"
+                  echo " Build job result: ${{ needs.build-and-push.result }}"
             - name: Checkout code
               uses: actions/checkout@v4
 
@@ -297,15 +297,15 @@ jobs:
                   SERVER_PORT="80"
                   BACKEND_PORT="3000"
 
-                  echo "🔧 Using template: $NGINX_TEMPLATE"
-                  echo "🌐 Domain: $DOMAIN"
-                  echo "🔌 Port: $SERVER_PORT"
+                  echo " Using template: $NGINX_TEMPLATE"
+                  echo " Domain: $DOMAIN"
+                  echo " Port: $SERVER_PORT"
 
                   # Copy the environment-specific nginx config
                   cp $NGINX_TEMPLATE nginx.reverse-proxy.conf
                       
-                  echo "✅ Using nginx config for ${{ env.ENVIRONMENT }}"
-                  echo "📄 Nginx config preview:"
+                  echo " Using nginx config for ${{ env.ENVIRONMENT }}"
+                  echo " Nginx config preview:"
                   head -20 nginx.reverse-proxy.conf
 
             - name: Update Docker Compose with new image tags
@@ -315,20 +315,20 @@ jobs:
 
                   # Update compose file with new image tags from build job outputs
                   if [[ -n "${{ needs.build-and-push.outputs.backend-image }}" ]]; then
-                    echo "🔄 Updating backend image to: ${{ needs.build-and-push.outputs.backend-image }}"
+                    echo " Updating backend image to: ${{ needs.build-and-push.outputs.backend-image }}"
                     sed -i "s|image: .*attendance-tracker-backend.*|image: ${{ needs.build-and-push.outputs.backend-image }}|g" $COMPOSE_FILE
                   else
-                    echo "ℹ️ Backend image not updated - using existing image"
+                    echo " Backend image not updated - using existing image"
                   fi
 
                   if [[ -n "${{ needs.build-and-push.outputs.frontend-image }}" ]]; then
-                    echo "🔄 Updating frontend image to: ${{ needs.build-and-push.outputs.frontend-image }}"
+                    echo " Updating frontend image to: ${{ needs.build-and-push.outputs.frontend-image }}"
                     sed -i "s|image: .*attendance-tracker-frontend.*|image: ${{ needs.build-and-push.outputs.frontend-image }}|g" $COMPOSE_FILE
                   else
-                    echo "ℹ️ Frontend image not updated - using existing image"
+                    echo " Frontend image not updated - using existing image"
                   fi
 
-                  echo "📄 Docker Compose file updated:"
+                  echo " Docker Compose file updated:"
                   head -20 $COMPOSE_FILE
 
             - name: Setup SSH
@@ -337,7 +337,7 @@ jobs:
                   mkdir -p ~/.ssh
 
                   # Debug: Show environment
-                  echo "🔍 Environment: ${{ env.ENVIRONMENT }}"
+                  echo " Environment: ${{ env.ENVIRONMENT }}"
 
                   # Use environment-specific SSH key, server host, and server user
                   if [[ "${{ env.ENVIRONMENT }}" == "production" ]]; then
@@ -345,23 +345,23 @@ jobs:
                     SSH_PRIVATE_KEY="${{ secrets.PRODUCTION_SSH_PRIVATE_KEY }}"
                     SERVER_USER="${{ secrets.PRODUCTION_SERVER_USER }}"
                     DOMAIN="${{ env.PRODUCTION_DOMAIN }}"
-                    echo "🔍 Using production server configuration"
+                    echo " Using production server configuration"
                   else
                     SERVER_HOST="${{ secrets.STAGING_SERVER_HOST }}"
                     SSH_PRIVATE_KEY="${{ secrets.STAGING_SSH_PRIVATE_KEY }}"
                     SERVER_USER="${{ secrets.STAGING_SERVER_USER }}"
                     DOMAIN="${{ env.STAGING_DOMAIN }}"
-                    echo "🔍 Using staging server configuration"
+                    echo " Using staging server configuration"
                   fi
 
                   # Debug: Show what SERVER_HOST we're using (mask for security)
-                  echo "🔍 SERVER_HOST: ${SERVER_HOST:0:3}***${SERVER_HOST: -3}"
-                  echo "🔍 SERVER_USER: ${SERVER_USER:0:2}***${SERVER_USER: -2}"
-                  echo "🔍 DOMAIN: $DOMAIN"
+                  echo " SERVER_HOST: ${SERVER_HOST:0:3}***${SERVER_HOST: -3}"
+                  echo " SERVER_USER: ${SERVER_USER:0:2}***${SERVER_USER: -2}"
+                  echo " DOMAIN: $DOMAIN"
 
                   # Check if SERVER_HOST is set
                   if [[ -z "$SERVER_HOST" ]]; then
-                    echo "❌ SERVER_HOST is empty! Check your secrets configuration."
+                    echo " SERVER_HOST is empty! Check your secrets configuration."
                     echo "Required secrets for ${{ env.ENVIRONMENT }}:"
                     if [[ "${{ env.ENVIRONMENT }}" == "production" ]]; then
                       echo "  - PRODUCTION_SERVER_HOST"
@@ -377,7 +377,7 @@ jobs:
 
                   # Check if SERVER_USER is set
                   if [[ -z "$SERVER_USER" ]]; then
-                    echo "❌ SERVER_USER is empty! Check your secrets configuration."
+                    echo " SERVER_USER is empty! Check your secrets configuration."
                     echo "Required secrets for ${{ env.ENVIRONMENT }}:"
                     if [[ "${{ env.ENVIRONMENT }}" == "production" ]]; then
                       echo "  - PRODUCTION_SERVER_USER"
@@ -389,7 +389,7 @@ jobs:
 
                   # Check if SSH_PRIVATE_KEY is set
                   if [[ -z "$SSH_PRIVATE_KEY" ]]; then
-                    echo "❌ SSH_PRIVATE_KEY is empty! Check your secrets configuration."
+                    echo " SSH_PRIVATE_KEY is empty! Check your secrets configuration."
                     echo "Required secrets for ${{ env.ENVIRONMENT }}:"
                     if [[ "${{ env.ENVIRONMENT }}" == "production" ]]; then
                       echo "  - PRODUCTION_SSH_PRIVATE_KEY"
@@ -404,20 +404,20 @@ jobs:
                   chmod 600 ~/.ssh/id_rsa
 
                   # Debug: Check SSH key format
-                  echo "🔍 SSH key first line:"
+                  echo " SSH key first line:"
                   head -n 1 ~/.ssh/id_rsa
-                  echo "🔍 SSH key last line:"
+                  echo " SSH key last line:"
                   tail -n 1 ~/.ssh/id_rsa
-                  echo "🔍 SSH key file permissions:"
+                  echo " SSH key file permissions:"
                   ls -la ~/.ssh/id_rsa
 
                   # Add server to known_hosts to avoid SSH verification prompt
                   ssh-keyscan -H "$SERVER_HOST" >> ~/.ssh/known_hosts
-                  echo "✅ Added $SERVER_HOST to known_hosts"
+                  echo " Added $SERVER_HOST to known_hosts"
 
                   # Debug: Test SSH connection
-                  echo "🔍 Testing SSH connection..."
-                  ssh -i ~/.ssh/id_rsa -o ConnectTimeout=10 -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_HOST} "echo 'SSH connection successful'" || echo "❌ SSH connection failed"
+                  echo " Testing SSH connection..."
+                  ssh -i ~/.ssh/id_rsa -o ConnectTimeout=10 -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_HOST} "echo 'SSH connection successful'" || echo " SSH connection failed"
 
                   # Export variables for next step
                   echo "SERVER_HOST=$SERVER_HOST" >> $GITHUB_ENV
@@ -427,11 +427,11 @@ jobs:
 
             - name: Deploy to Server
               run: |
-                  echo "🚀 Deploying to ${{ env.ENVIRONMENT }} server..."
+                  echo " Deploying to ${{ env.ENVIRONMENT }} server..."
 
                   # Use environment variables set in previous step
-                  echo "🔍 SERVER_HOST: ${SERVER_HOST}"
-                  echo "🔍 SERVER_USER: ${SERVER_USER}"
+                  echo " SERVER_HOST: ${SERVER_HOST}"
+                  echo " SERVER_USER: ${SERVER_USER}"
 
                   # Define compose file and database URL based on environment
                   if [[ "${{ env.ENVIRONMENT }}" == "production" ]]; then
@@ -448,42 +448,42 @@ jobs:
 
                   PROJECT_DIR="/home/${SERVER_USER}/attendance-tracker"
 
-                  echo "📡 Connecting to ${SERVER_USER}@${SERVER_HOST}..."
+                  echo " Connecting to ${SERVER_USER}@${SERVER_HOST}..."
 
                   # First, ensure the project directory exists and set up the environment
-                  echo "🔍 Setting up project directory..."
+                  echo " Setting up project directory..."
                   ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_HOST} "
                   # Create project directory if it doesn't exist
                   mkdir -p ${PROJECT_DIR}
 
                   # Add user to docker group if not already (needed for Docker access)
                   if ! groups \$USER | grep -q docker; then
-                    echo '🔧 Adding user to docker group...'
+                    echo ' Adding user to docker group...'
                     sudo usermod -aG docker \$USER
-                    echo '⚠️  User added to docker group. Note: Group changes take effect on next login.'
+                    echo '  User added to docker group. Note: Group changes take effect on next login.'
                   fi
 
-                  echo '✅ Project directory set up'
+                  echo ' Project directory set up'
                   "
 
                   # Copy updated docker-compose file to server
-                  echo "🔍 Copying deployment files..."
+                  echo " Copying deployment files..."
                   scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no $COMPOSE_FILE nginx.reverse-proxy.conf ${SERVER_USER}@${SERVER_HOST}:${PROJECT_DIR}/
 
                   # Execute deployment commands on the server
-                  echo "🔍 Executing deployment..."
+                  echo " Executing deployment..."
                   GCP_REGION="${{ env.GCP_REGION }}"
                   ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_HOST} <<EOF
                   set -e
 
-                  echo '📁 Navigating to project directory...'
+                  echo ' Navigating to project directory...'
                   cd /home/\$(whoami)/attendance-tracker
 
-                  echo '🔍 Checking current working directory and files...'
+                  echo ' Checking current working directory and files...'
                   pwd
                   ls -la
 
-                  echo '⚙️ Creating environment file...'
+                  echo ' Creating environment file...'
                   echo "DATABASE_URL=$DATABASE_URL" > .env
                   echo "JWT_SECRET=${{ secrets.JWT_SECRET || 'staging-jwt-secret-changeme' }}" >> .env
                   echo "NODE_ENV=${{ env.ENVIRONMENT }}" >> .env
@@ -491,66 +491,66 @@ jobs:
                   echo "GOOGLE_CLIENT_SECRET=$OAUTH_CLIENT_SECRET" >> .env
                   echo "FRONTEND_URL=https://$DOMAIN" >> .env
                   echo "GOOGLE_CALLBACK_URL=https://$DOMAIN/api/v1/auth/google/callback" >> .env
-                  echo '✅ Environment file created'
+                  echo ' Environment file created'
 
-                  echo '🐳 Checking Docker and Docker Compose...'
+                  echo ' Checking Docker and Docker Compose...'
                   docker --version
                   docker-compose --version
 
-                  echo '🔑 Configuring Docker authentication...'
+                  echo ' Configuring Docker authentication...'
                   gcloud auth configure-docker $GCP_REGION-docker.pkg.dev --quiet
 
-                  echo '📦 Pulling latest Docker images...'
+                  echo ' Pulling latest Docker images...'
                   if ! docker-compose -f $COMPOSE_FILE pull; then
-                    echo '❌ Failed to pull images'
+                    echo ' Failed to pull images'
                     exit 1
                   fi
 
-                  echo '🔄 Stopping old containers...'
+                  echo ' Stopping old containers...'
                   if ! docker-compose -f $COMPOSE_FILE down; then
-                    echo '❌ Failed to stop containers'
+                    echo ' Failed to stop containers'
                     exit 1
                   fi
 
-                  echo '🗄️ Running database migrations...'
+                  echo ' Running database migrations...'
                   # Since we use external Aiven database, run migrations directly
-                  echo '🔄 Running Prisma migrations...'
+                  echo ' Running Prisma migrations...'
                   if ! docker-compose -f $COMPOSE_FILE run --rm backend npx prisma migrate deploy; then
-                    echo '❌ Failed to run database migrations'
-                    echo '📋 Checking migration status...'
+                    echo ' Failed to run database migrations'
+                    echo ' Checking migration status...'
                     docker-compose -f $COMPOSE_FILE run --rm backend npx prisma migrate status || true
-                    echo '📋 Recent backend logs:'
+                    echo ' Recent backend logs:'
                     docker-compose -f $COMPOSE_FILE logs backend --tail=20 || true
                     exit 1
                   fi
 
-                  echo '✅ Database migrations completed successfully!'
+                  echo ' Database migrations completed successfully!'
 
-                  echo '🌱 Running database seed (staging only)...'
+                  echo ' Running database seed (staging only)...'
                   # Only seed in staging to avoid overwriting production data
                   if [[ "${{ env.ENVIRONMENT }}" == "staging" ]]; then
-                    docker-compose -f $COMPOSE_FILE run --rm backend npx prisma db seed || echo '⚠️ Seeding skipped or failed (not critical)'
+                    docker-compose -f $COMPOSE_FILE run --rm backend npx prisma db seed || echo ' Seeding skipped or failed (not critical)'
                   else
-                    echo 'ℹ️ Skipping seed for production environment'
+                    echo ' Skipping seed for production environment'
                   fi
 
-                  echo '🚀 Starting all containers...'
+                  echo ' Starting all containers...'
                   if ! docker-compose -f $COMPOSE_FILE up -d; then
-                    echo '❌ Failed to start containers'
+                    echo ' Failed to start containers'
                     exit 1
                   fi
 
-                  echo '⏳ Waiting for containers to be ready...'
+                  echo ' Waiting for containers to be ready...'
                   sleep 30
 
-                  echo '🔍 Verifying container health...'
+                  echo ' Verifying container health...'
                   FAILED_SERVICES=""
 
                   for service in \$(docker-compose -f $COMPOSE_FILE ps --services); do
                     CONTAINER_ID=\$(docker-compose -f $COMPOSE_FILE ps -q \$service)
                     
                     if [[ -z "\$CONTAINER_ID" ]]; then
-                      echo "❌ Service \$service - No container found"
+                      echo " Service \$service - No container found"
                       FAILED_SERVICES="\$FAILED_SERVICES \$service"
                       continue
                     fi
@@ -558,25 +558,25 @@ jobs:
                     STATUS=\$(docker inspect -f '{{.State.Status}}' \$CONTAINER_ID 2>/dev/null || echo "unknown")
                     HEALTH=\$(docker inspect -f '{{.State.Health.Status}}' \$CONTAINER_ID 2>/dev/null || echo "none")
                     
-                    echo "🔍 Service \$service - Status: \$STATUS, Health: \$HEALTH"
+                    echo " Service \$service - Status: \$STATUS, Health: \$HEALTH"
                     
                     if [[ "\$STATUS" != "running" ]]; then
-                      echo "❌ Service \$service is not running (Status: \$STATUS)"
+                      echo " Service \$service is not running (Status: \$STATUS)"
                       FAILED_SERVICES="\$FAILED_SERVICES \$service"
                     elif [[ "\$HEALTH" == "unhealthy" ]]; then
-                      echo "❌ Service \$service is unhealthy"
+                      echo " Service \$service is unhealthy"
                       FAILED_SERVICES="\$FAILED_SERVICES \$service"
                     else
-                      echo "✅ Service \$service is healthy"
+                      echo " Service \$service is healthy"
                     fi
                   done
 
                   if [[ -n "\$FAILED_SERVICES" ]]; then
-                    echo '❌ Some services are not running properly!'
+                    echo ' Some services are not running properly!'
                     echo "Failed services:\$FAILED_SERVICES"
-                    echo '📊 Current container status:'
+                    echo ' Current container status:'
                     docker-compose -f $COMPOSE_FILE ps
-                    echo '📋 Recent logs from failed services:'
+                    echo ' Recent logs from failed services:'
                     for service in \$FAILED_SERVICES; do
                       echo "--- Logs for \$service ---"
                       docker-compose -f $COMPOSE_FILE logs --tail=10 \$service
@@ -584,19 +584,19 @@ jobs:
                     exit 1
                   fi
 
-                  echo '✅ All services are running and healthy!'
+                  echo ' All services are running and healthy!'
 
-                  echo '🔍 Testing backend health endpoint...'
+                  echo ' Testing backend health endpoint...'
                   BACKEND_CONTAINER="attendance_backend_${{ env.ENVIRONMENT }}"
                   i=1
                   while [ \$i -le 10 ]; do
                     if docker exec \$BACKEND_CONTAINER wget -q --spider http://localhost:3000/api/v1/health 2>/dev/null; then
-                      echo '✅ Backend health check passed!'
+                      echo ' Backend health check passed!'
                       break
                     else
-                      echo "⏳ Health check attempt \$i/10..."
+                      echo " Health check attempt \$i/10..."
                       if [ \$i -eq 10 ]; then
-                        echo '❌ Backend health check failed after 10 attempts!'
+                        echo ' Backend health check failed after 10 attempts!'
                         docker logs \$BACKEND_CONTAINER --tail=20
                         exit 1
                       fi
@@ -605,13 +605,13 @@ jobs:
                     i=\$((i + 1))
                   done
 
-                  echo '🧹 Cleaning up old Docker images...'
+                  echo ' Cleaning up old Docker images...'
                   docker image prune -f
 
-                  echo '✅ Deployment completed successfully!'
-                  echo '📊 Service status:'
+                  echo ' Deployment completed successfully!'
+                  echo ' Service status:'
                   docker-compose -f $COMPOSE_FILE ps
-                  echo '🔍 Container logs (last 5 lines):'
+                  echo ' Container logs (last 5 lines):'
                   docker-compose -f $COMPOSE_FILE logs --tail=5
                   EOF
 
@@ -625,8 +625,8 @@ jobs:
             - name: Notify deployment status
               run: |
                   if [[ "${{ needs.deploy-application.result }}" == "success" ]]; then
-                    echo "✅ Docker images built and pushed successfully!"
-                    echo "📦 Images are ready for deployment with Docker Compose"
+                    echo " Docker images built and pushed successfully!"
+                    echo " Images are ready for deployment with Docker Compose"
                   else
-                    echo "❌ Build or deployment preparation failed!"
+                    echo " Build or deployment preparation failed!"
                   fi

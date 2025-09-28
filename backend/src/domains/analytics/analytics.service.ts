@@ -1,24 +1,24 @@
+import {
+  AttendanceRecord,
+  AttendanceStatus,
+  OverrideType,
+} from '@prisma/client';
+import { addDays, isBefore, isPast, startOfToday } from 'date-fns';
+import { BadRequestError, NotFoundError } from '../../core/errors';
+import {
+  formatDate,
+  normalizeDate,
+} from '../../core/utils';
+import prisma from '../../infrastructure/prisma';
 import { attendanceRepository } from '../attendance/attendance.repository';
 import { streamService } from '../stream/stream.service';
-import {
-    AttendanceCalculatorInput,
-    StreamAnalyticsOutput,
-    SubjectStatsOutput,
-    AttendanceProjectionOutput,
-} from './analytics.dto';
-import { NotFoundError, BadRequestError } from '../../core/errors';
-import {
-    AttendanceStatus,
-    OverrideType,
-    AttendanceRecord,
-} from '@prisma/client';
-import {
-    normalizeDate,
-    formatDate,
-} from '../../core/utils';
-import { addDays, isBefore, isPast, startOfToday} from 'date-fns';
-import prisma from '../../infrastructure/prisma';
 import { timetableService } from '../timetable/timetable.service';
+import {
+  AttendanceCalculatorInput,
+  AttendanceProjectionOutput,
+  StreamAnalyticsOutput,
+  SubjectStatsOutput,
+} from './analytics.dto';
 
 export const analyticsService = {
     async getStreamAttendanceStats(
@@ -98,7 +98,7 @@ export const analyticsService = {
         overrides.forEach((ov) => {
             const dateStr = formatDate(ov.classDate);
             const timeStr = ov.originalStartTime || 'no-start';
-            const originalKey = `${dateStr}_${ov.originalSubjectName}_${timeStr}`;
+            const originalKey = `${dateStr}_${ov.originalSubjectName}_${timeStr}_${ov.entryIndex}`;
 
             if (ov.overrideType === OverrideType.CANCELLED) {
                 if (!cancelledKeys.has(originalKey)) {
@@ -112,6 +112,11 @@ export const analyticsService = {
                         (cancelledCounts[ov.originalSubjectName] || 0) + 1;
                     cancelledKeys.add(originalKey);
                 }
+                if (ov.replacementSubjectName) {
+                    replacementCounts[ov.replacementSubjectName] =
+                        (replacementCounts[ov.replacementSubjectName] || 0) + 1;
+                }
+            } else if (ov.overrideType === OverrideType.ADDED) {
                 if (ov.replacementSubjectName) {
                     replacementCounts[ov.replacementSubjectName] =
                         (replacementCounts[ov.replacementSubjectName] || 0) + 1;
@@ -257,12 +262,13 @@ export const analyticsService = {
             futureOverrides.forEach((ov) => {
                 const dateStr = formatDate(ov.classDate);
                 const timeStr = ov.originalStartTime || 'no-start';
-                const originalKey = `${dateStr}_${ov.originalSubjectName}_${timeStr}`;
+                const originalKey = `${dateStr}_${ov.originalSubjectName}_${timeStr}_${ov.entryIndex}`;
                 if (ov.overrideType === OverrideType.CANCELLED) {
                     if (!futureCancelledKeys.has(originalKey)) {
                         futureCancelledMap[ov.originalSubjectName] =
                             (futureCancelledMap[ov.originalSubjectName] || 0) + 1;
                         futureCancelledKeys.add(originalKey);
+                        console.log(` Analytics Future: Counting cancelled class - ${ov.originalSubjectName} (entryIndex: ${ov.entryIndex}) on ${dateStr}`);
                     }
                 } else if (ov.overrideType === OverrideType.REPLACED) {
                     if (!futureCancelledKeys.has(originalKey)) {
@@ -270,6 +276,11 @@ export const analyticsService = {
                             (futureCancelledMap[ov.originalSubjectName] || 0) + 1;
                         futureCancelledKeys.add(originalKey);
                     }
+                    if (ov.replacementSubjectName) {
+                        futureReplacementMap[ov.replacementSubjectName] =
+                            (futureReplacementMap[ov.replacementSubjectName] || 0) + 1;
+                    }
+                } else if (ov.overrideType === OverrideType.ADDED) {
                     if (ov.replacementSubjectName) {
                         futureReplacementMap[ov.replacementSubjectName] =
                             (futureReplacementMap[ov.replacementSubjectName] || 0) + 1;

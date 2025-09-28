@@ -1,20 +1,32 @@
-import { AuthProvider } from './contexts/AuthContext';
-import { AppRouter } from './router'; // Uncomment
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { Toaster } from 'react-hot-toast';
+import { AuthProvider } from './contexts/AuthContext';
+import { AppRouter } from './router';
 
 const queryClient = new QueryClient({
   defaultOptions: {
       queries: {
-          staleTime: 1000 * 60 * 5,
-          refetchOnWindowFocus: false,
           retry: 1,
       },
       mutations: {
-          // Optional: Default retry for mutations (usually 0)
-          // retry: 0,
+          retry: 1,
       }
+  },
+});
+
+queryClient.setQueryDefaults(['weeklyAttendanceView'], {
+  staleTime: 0,
+  gcTime: 0,
+  refetchOnMount: 'always',
+  refetchOnWindowFocus: true,
+  refetchOnReconnect: true,
+  retry: false
+});
+
+queryClient.setMutationDefaults(['replaceClass', 'cancelClass', 'addSubject'], {
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['weeklyAttendanceView'], exact: false });
   },
 });
 

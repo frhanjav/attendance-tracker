@@ -1,20 +1,21 @@
+import { AttendanceRecord, AttendanceStatus, BulkAttendanceEntry, ClassOverride, Prisma } from '@prisma/client';
+import { formatDate, normalizeDate } from '../../core/utils';
 import prisma from '../../infrastructure/prisma';
-import { Prisma, AttendanceRecord, AttendanceStatus, BulkAttendanceEntry, ClassOverride } from '@prisma/client';
-import { normalizeDate, formatDate } from '../../core/utils';
 
 export const attendanceRepository = {
     async upsertRecord(data: {
         userId: string; streamId: string; subjectName: string; courseCode?: string | null;
         classDate: Date; status: AttendanceStatus; isReplacement?: boolean | null;
+        subjectIndex: number;
     }): Promise<AttendanceRecord> {
         const normalizedClassDate = normalizeDate(data.classDate);
         const isReplacementValue = data.isReplacement ?? false;
         return prisma.attendanceRecord.upsert({
             where: {
-                userId_streamId_subjectName_classDate_isReplacement: {
+                userId_streamId_subjectName_classDate_subjectIndex_isReplacement: {
                     userId: data.userId, streamId: data.streamId,
                     subjectName: data.subjectName, classDate: normalizedClassDate,
-                    isReplacement: isReplacementValue,
+                    subjectIndex: data.subjectIndex, isReplacement: isReplacementValue,
                 },
             },
             update: { status: data.status },
@@ -23,6 +24,7 @@ export const attendanceRepository = {
                 courseCode: data.courseCode, classDate: normalizedClassDate,
                 status: data.status,
                 isReplacement: isReplacementValue,
+                subjectIndex: data.subjectIndex,
             },
         });
     },
@@ -40,7 +42,7 @@ export const attendanceRepository = {
                 id: true, userId: true, streamId: true, subjectName: true, courseCode: true,
                 classDate: true, status: true, markedAt: true,
                 isReplacement: true, originalSubjectName: true, originalCourseCode: true,
-                originalStartTime: true, originalEndTime: true
+                originalStartTime: true, originalEndTime: true, subjectIndex: true
             },
             orderBy: { classDate: 'asc' }
         });
@@ -76,10 +78,11 @@ export const attendanceRepository = {
         const classDateNorm = normalizeDate(data.classDate);
         return prisma.classOverride.upsert({
             where: {
-                streamId_classDate_originalSubjectName: {
+                streamId_classDate_originalSubjectName_entryIndex: {
                     streamId: data.streamId,
                     classDate: classDateNorm,
                     originalSubjectName: data.originalSubjectName,
+                    entryIndex: data.entryIndex,
                 }
             },
             update: {
@@ -90,12 +93,14 @@ export const attendanceRepository = {
                 replacementEndTime: data.replacementEndTime,
                 adminUserId: data.adminUserId,
                 originalStartTime: data.originalStartTime,
+                entryIndex: data.entryIndex,
             },
             create: {
                 streamId: data.streamId,
                 classDate: classDateNorm,
                 originalSubjectName: data.originalSubjectName,
                 originalStartTime: data.originalStartTime,
+                entryIndex: data.entryIndex,
                 overrideType: data.overrideType,
                 replacementSubjectName: data.replacementSubjectName,
                 replacementCourseCode: data.replacementCourseCode,
@@ -143,17 +148,18 @@ export const attendanceRepository = {
                 status: AttendanceStatus.CANCELLED,
                 classDate: { gte: startDate, lte: endDate },
             },
-            distinct: ['classDate', 'subjectName'],
+            distinct: ['classDate', 'subjectName', 'subjectIndex'],
             select: {
                 classDate: true,
                 subjectName: true,
+                subjectIndex: true,
             }
         });
 
         const cancelledKeys = new Set<string>();
         cancelledRecords.forEach(rec => {
             const dateStr = formatDate(rec.classDate);
-            const key = `${dateStr}_${rec.subjectName}`;
+            const key = `${dateStr}_${rec.subjectName}_${rec.subjectIndex}`;
             cancelledKeys.add(key);
         });
         return cancelledKeys;

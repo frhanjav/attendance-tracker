@@ -7,7 +7,7 @@ export enum AttendanceStatus {
 }
 
 export interface WeeklyAttendanceViewEntry {
-    date: string; // YYYY-MM-DD
+    date: string;
     dayOfWeek: number;
     subjectName: string;
     courseCode: string | null;
@@ -17,6 +17,9 @@ export interface WeeklyAttendanceViewEntry {
     recordId?: string;
     isReplacement?: boolean;
     originalSubjectName?: string | null;
+    isGloballyCancelled?: boolean;
+    isAdded?: boolean;
+    subjectIndex?: number;
 }
 
 export interface MarkAttendanceInput {
@@ -25,6 +28,7 @@ export interface MarkAttendanceInput {
     courseCode?: string | null;
     classDate: string;
     status: AttendanceStatus;
+    subjectIndex: number;
 }
 
 export interface BulkAttendanceInput {
@@ -39,6 +43,7 @@ export interface CancelClassInput {
     classDate: string;
     subjectName: string;
     startTime?: string | null;
+    entryIndex: number;
 }
 
 export interface ReplaceClassInput {
@@ -50,6 +55,17 @@ export interface ReplaceClassInput {
     replacementCourseCode?: string | null;
     replacementStartTime?: string | null;
     replacementEndTime?: string | null;
+    entryIndex: number;
+}
+
+export interface AddSubjectInput {
+    streamId: string;
+    classDate: string;
+    subjectName: string;
+    courseCode?: string | null;
+    startTime?: string | null;
+    endTime?: string | null;
+    entryIndex: number;
 }
 
 export interface AttendanceRecordOutput {
@@ -87,7 +103,16 @@ export const attendanceService = {
     getWeeklyAttendanceView: async (streamId: string, startDate: string, endDate: string): Promise<WeeklyAttendanceViewEntry[]> => {
         try {
             const response = await apiClient.get<WeeklyAttendanceViewResponse>(`/attendance/weekly/${streamId}`, {
-                params: { startDate, endDate }
+                params: {
+                    startDate,
+                    endDate,
+                    _t: Date.now()
+                },
+                headers: {
+                    'Cache-Control': 'no-cache, no-store, must-revalidate',
+                    'Pragma': 'no-cache',
+                    'Expires': '0'
+                }
             });
             if (response.data?.status !== 'success' || !response.data?.data?.attendanceView) {
                 throw new Error("Invalid API response structure for weekly attendance view.");
@@ -124,6 +149,19 @@ export const attendanceService = {
         throw new Error(error.message || 'Failed to replace class');
     }
 },
+
+    addSubjectGlobally: async (data: AddSubjectInput): Promise<{ message: string; updatedCount: number }> => {
+        try {
+            const response = await apiClient.post<ClassUpdateResponse>('/attendance/add', data);
+            if (response.data?.status !== 'success' || !response.data?.data) {
+                throw new Error("Invalid API response structure for add subject.");
+            }
+            return response.data.data;
+        } catch (error: any) {
+            console.error("Error adding subject:", error);
+            throw new Error(error.message || 'Failed to add subject');
+        }
+    },
 
     markAttendance: async (data: MarkAttendanceInput): Promise<AttendanceRecordOutput> => {
       try {

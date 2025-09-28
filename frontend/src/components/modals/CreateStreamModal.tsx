@@ -7,12 +7,12 @@ import toast from 'react-hot-toast';
 import { z } from 'zod';
 import { Button } from '../../components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
 } from "../../components/ui/dialog";
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
@@ -42,7 +42,6 @@ const CreateStreamModal: React.FC<CreateStreamModalProps> = ({ isOpen, onClose }
         onSuccess: (data) => {
             toast.success(`Stream "${data.name}" created successfully! Code: ${data.streamCode}`);
             queryClient.invalidateQueries({ queryKey: ['myStreams'] });
-            queryClient.invalidateQueries({ queryKey: ['myStreamsDashboard'] });
             handleClose();
         },
         onError: (error: Error) => {

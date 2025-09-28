@@ -7,12 +7,12 @@ import toast from 'react-hot-toast';
 import { z } from 'zod';
 import { Button } from '../../components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
 } from "../../components/ui/dialog";
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
@@ -44,7 +44,6 @@ const JoinStreamModal: React.FC<JoinStreamModalProps> = ({ isOpen, onClose }) =>
         onSuccess: (data) => {
             toast.success(`Successfully joined stream "${data.name}"!`);
             queryClient.invalidateQueries({ queryKey: ['myStreams'] });
-            queryClient.invalidateQueries({ queryKey: ['myStreamsDashboard'] });
             handleClose();
         },
         onError: (error: Error) => {

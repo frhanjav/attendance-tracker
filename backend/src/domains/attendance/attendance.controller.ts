@@ -1,8 +1,9 @@
-import { Request, Response, NextFunction } from 'express';
-import { attendanceService } from './attendance.service';
-import { MarkAttendanceInput, BulkAttendanceInput, CancelClassInput, ReplaceClassInput } from './attendance.dto';
-import { ParsedQs } from 'qs';
 import { AuthenticatedUser } from '@/middleware/auth.middleware';
+import { NextFunction, Request, Response } from 'express';
+import { ParsedQs } from 'qs';
+import { attendanceDebugService } from './attendance.debug';
+import { AddSubjectInput, BulkAttendanceInput, CancelClassInput, MarkAttendanceInput, ReplaceClassInput } from './attendance.dto';
+import { attendanceService } from './attendance.service';
 
 export const attendanceController = {
     async handleMarkAttendance(req: Request<{}, {}, MarkAttendanceInput>, res: Response, next: NextFunction) {
@@ -80,6 +81,17 @@ export const attendanceController = {
         }
     },
 
+    async handleAddSubjectGlobally(req: Request<{}, {}, AddSubjectInput>, res: Response, next: NextFunction) {
+        try {
+            const adminUserId = (req.user as AuthenticatedUser).id;
+            if (!adminUserId) throw new Error("Authentication error");
+            const result = await attendanceService.addSubjectGlobally(req.body, adminUserId);
+            res.status(200).json({ status: 'success', data: result });
+        } catch (error) {
+            next(error);
+        }
+    },
+
     async handleGetWeeklyAttendanceView(
         req: Request<{ streamId: string }, {}, {}, { startDate?: string, endDate?: string } & ParsedQs>,
         res: Response,
@@ -96,6 +108,41 @@ export const attendanceController = {
             
             res.set('Cache-Control', 'private, max-age=300');
             res.status(200).json({ status: 'success', data: { attendanceView: weeklyView } });
+        } catch (error) {
+            next(error);
+        }
+    },
+
+    async handleDebugAttendance(req: Request, res: Response, next: NextFunction) {
+        try {
+            const user = req.user as AuthenticatedUser;
+            if (!user?.id) throw new Error("Authentication error");
+            
+            const { streamId, subjectName, classDate } = req.query as { 
+                streamId: string, 
+                subjectName: string, 
+                classDate: string 
+            };
+
+            if (!streamId || !subjectName || !classDate) {
+                return res.status(400).json({ 
+                    status: 'error', 
+                    message: 'Missing required query parameters: streamId, subjectName, classDate' 
+                });
+            }
+
+            const debugInfo = await attendanceDebugService.checkRecordExists({
+                userId: user.id,
+                streamId,
+                subjectName,
+                classDate,
+                subjectIndex: 0
+            });
+
+            res.status(200).json({ 
+                status: 'success', 
+                data: debugInfo 
+            });
         } catch (error) {
             next(error);
         }

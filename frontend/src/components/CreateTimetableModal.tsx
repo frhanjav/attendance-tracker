@@ -1,18 +1,24 @@
-import React, { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-    useForm,
-    useFieldArray,
-} from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { format, parseISO } from 'date-fns';
+import { Import, Loader2, PlusCircle } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
 import {
-    timetableService,
-    TimetableOutput,
-    TimetableBasicInfo,
-    CreateTimetableFrontendInput
-} from '../services/timetable.service';
+    useFieldArray,
+    useForm,
+} from 'react-hook-form';
+import toast from 'react-hot-toast';
+import { z } from 'zod';
+import SubjectInputBlock from '../components/forms/SubjectInputBlock';
 import { Button } from '../components/ui/button';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '../components/ui/dialog';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import {
@@ -22,19 +28,13 @@ import {
     SelectTrigger,
     SelectValue,
 } from '../components/ui/select';
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogFooter,
-    DialogDescription,
-} from '../components/ui/dialog';
-import { PlusCircle, Import, Loader2 } from 'lucide-react';
-import toast from 'react-hot-toast';
-import { parseISO, format } from 'date-fns';
-import SubjectInputBlock from '../components/forms/SubjectInputBlock';
 import { ApiError } from '../lib/apiClient';
+import {
+    CreateTimetableFrontendInput,
+    TimetableBasicInfo,
+    TimetableOutput,
+    timetableService
+} from '../services/timetable.service';
 
 const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
 const invalidTimeMessage = 'Invalid time (HH:MM)';
@@ -186,6 +186,7 @@ const CreateTimetableModal: React.FC<CreateTimetableModalProps> = ({ isOpen, onC
             queryClient.invalidateQueries({ queryKey: ['timetableList', streamId] });
             queryClient.invalidateQueries({ queryKey: ['weeklySchedule', streamId] });
             queryClient.invalidateQueries({ queryKey: ['attendanceWeek', streamId] });
+            queryClient.invalidateQueries({ queryKey: ['weeklyAttendanceView', streamId] });
             queryClient.invalidateQueries({ queryKey: ['streamAnalytics', streamId] });
             reset();
             setFormError(null);

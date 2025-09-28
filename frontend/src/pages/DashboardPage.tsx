@@ -1,8 +1,7 @@
-import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { streamService, StreamBasic } from '../services/stream.service';
+import { Archive, ArrowRight, Loader2, LogIn, Plus } from 'lucide-react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, LogIn, ArrowRight, Loader2, Archive } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import {
     Card,
@@ -12,9 +11,10 @@ import {
     CardHeader,
     CardTitle,
 } from '../components/ui/card';
-import useUIStore from '../stores/uiStore';
-import { Switch } from '../components/ui/switch';
 import { Label } from '../components/ui/label';
+import { Switch } from '../components/ui/switch';
+import { StreamBasic, streamService } from '../services/stream.service';
+import useUIStore from '../stores/uiStore';
 
 const DashboardPage: React.FC = () => {
     const openCreateStreamModal = useUIStore((state) => state.openCreateStreamModal);
@@ -27,7 +27,7 @@ const DashboardPage: React.FC = () => {
         isLoading,
         error,
     } = useQuery<StreamBasic[], Error>({
-        queryKey: ['myStreamsDashboard', showArchived],
+        queryKey: ['myStreams', 'dashboard', showArchived],
         queryFn: () => streamService.getMyStreams(showArchived),
         staleTime: 1000 * 60 * 10,
     });

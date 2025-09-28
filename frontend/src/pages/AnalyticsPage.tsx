@@ -357,7 +357,7 @@ const AnalyticsPage: React.FC = () => {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {displayStats.subjectStats.length === 0 && (
+                            {displayStats.subjectStats.length === 0 ? (
                                 <TableRow>
                                     <TableCell
                                         colSpan={5}
@@ -366,8 +366,8 @@ const AnalyticsPage: React.FC = () => {
                                         No subject data available.
                                     </TableCell>
                                 </TableRow>
-                            )}
-                            {displayStats.subjectStats.map((subject) => {
+                            ) : (
+                                displayStats.subjectStats.map((subject) => {
                                 const maxAttended = subject.totalHeldClasses;
                                 return (
                                     <TableRow key={subject.subjectName}>
@@ -421,7 +421,8 @@ const AnalyticsPage: React.FC = () => {
                                         </TableCell>
                                     </TableRow>
                                 );
-                            })}
+                            })
+                            )}
                         </TableBody>
                     </Table>
                     {isManualMode && (

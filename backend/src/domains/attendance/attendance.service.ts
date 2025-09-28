@@ -1,11 +1,12 @@
-import { attendanceRepository } from './attendance.repository';
-import { timetableService, WeeklyScheduleEntry as TimetableScheduleEntry } from '../timetable/timetable.service';
-import { streamService } from '../stream/stream.service';
-import { MarkAttendanceInput, BulkAttendanceInput, AttendanceRecordOutput, ReplaceClassInput, CancelClassInput } from './attendance.dto';
-import { BadRequestError } from '../../core/errors';
 import { AttendanceRecord, AttendanceStatus, ClassOverride, OverrideType } from '@prisma/client';
-import { normalizeDate, formatDate } from '../../core/utils';
+import { assignConsistentIndices } from '../../core/entryIndexing';
+import { BadRequestError } from '../../core/errors';
+import { formatDate, getDaysInInterval, getISODayOfWeek, normalizeDate } from '../../core/utils';
 import prisma from '../../infrastructure/prisma';
+import { streamService } from '../stream/stream.service';
+import { timetableService } from '../timetable/timetable.service';
+import { AddSubjectInput, AttendanceRecordOutput, BulkAttendanceInput, CancelClassInput, MarkAttendanceInput, ReplaceClassInput } from './attendance.dto';
+import { attendanceRepository } from './attendance.repository';
 
 export interface WeeklyAttendanceViewEntry {
     date: string;
@@ -19,6 +20,8 @@ export interface WeeklyAttendanceViewEntry {
     isReplacement: boolean;
     originalSubjectName: string | null;
     isGloballyCancelled: boolean;
+    isAdded?: boolean;
+    subjectIndex?: number;
 }
 
 export const attendanceService = {
@@ -27,9 +30,9 @@ export const attendanceService = {
         const classDateNorm = normalizeDate(input.classDate);
 
         const override = await prisma.classOverride.findUnique({
-             where: { streamId_classDate_originalSubjectName: {
+             where: { streamId_classDate_originalSubjectName_entryIndex: {
                  streamId: input.streamId, classDate: classDateNorm,
-                 originalSubjectName: input.subjectName,
+                 originalSubjectName: input.subjectName, entryIndex: input.subjectIndex,
              }}
         });
 
@@ -47,6 +50,7 @@ export const attendanceService = {
         const record = await attendanceRepository.upsertRecord({
             userId: userId, streamId: input.streamId, subjectName: input.subjectName,
             courseCode: input.courseCode, classDate: classDateNorm, status: input.status,
+            subjectIndex: input.subjectIndex,
         });
 
         return {
@@ -96,20 +100,22 @@ export const attendanceService = {
 
         const recordsMap = new Map<string, AttendanceRecord>();
         userAttendanceRecords.forEach((rec: AttendanceRecord) => {
-            const key = `${formatDate(rec.classDate)}_${rec.subjectName}`;
+            const key = `${formatDate(rec.classDate)}_${rec.subjectName}_${rec.subjectIndex}`;
             recordsMap.set(key, rec);
         });
+        const indexedSchedule = assignConsistentIndices(weeklySchedule);
 
         const overrideMap = new Map<string, ClassOverride>();
+
         overrides.forEach(ov => {
-            const key = `${formatDate(ov.classDate)}_${ov.originalSubjectName}_${ov.originalStartTime || 'no-start'}`;
+            const key = `${formatDate(ov.classDate)}_${ov.originalSubjectName}_${ov.originalStartTime || 'no-start'}_${ov.entryIndex}`;
             overrideMap.set(key, ov);
         });
 
-        for (const scheduledEntry of weeklySchedule) {
+        for (const scheduledEntry of indexedSchedule) {
             const dateStr = scheduledEntry.date;
             const timeStr = scheduledEntry.startTime || 'no-start';
-            const overrideKey = `${dateStr}_${scheduledEntry.subjectName}_${timeStr}`;
+            const overrideKey = `${dateStr}_${scheduledEntry.subjectName}_${timeStr}_${scheduledEntry.subjectIndex}`;
             const override = overrideMap.get(overrideKey);
 
             const isGloballyCancelled = override?.overrideType === OverrideType.CANCELLED;
@@ -124,11 +130,24 @@ export const attendanceService = {
                     recordId: undefined,
                     isReplacement: false, originalSubjectName: null,
                     isGloballyCancelled: true,
+                    isAdded: false,
+                    subjectIndex: scheduledEntry.subjectIndex,
                 });
 
-                const replacementKey = `${dateStr}_${override.replacementSubjectName}`;
+                const replacementRecord = userAttendanceRecords.find(r =>
+                    formatDate(r.classDate) === dateStr &&
+                    r.subjectName === override.replacementSubjectName &&
+                    r.isReplacement &&
+                    r.originalSubjectName === scheduledEntry.subjectName
+                );
+
+                const replacementKey = replacementRecord
+                    ? `${dateStr}_${override.replacementSubjectName}_${replacementRecord.subjectIndex}`
+                    : `${dateStr}_${override.replacementSubjectName}_${scheduledEntry.subjectIndex}`; // fallback
+
                 const userRecordForReplacement = recordsMap.get(replacementKey);
-                finalViewEntries.push({
+
+                const replacementEntry = {
                     date: dateStr, dayOfWeek: scheduledEntry.dayOfWeek,
                     subjectName: override.replacementSubjectName,
                     courseCode: override.replacementCourseCode,
@@ -139,9 +158,14 @@ export const attendanceService = {
                     isReplacement: true,
                     originalSubjectName: scheduledEntry.subjectName,
                     isGloballyCancelled: false,
-                });
+                    isAdded: false,
+                    subjectIndex: replacementRecord?.subjectIndex ?? scheduledEntry.subjectIndex,
+                };
+
+                finalViewEntries.push(replacementEntry);
+
             } else {
-                const userRecordKey = `${dateStr}_${scheduledEntry.subjectName}`;
+                const userRecordKey = `${dateStr}_${scheduledEntry.subjectName}_${scheduledEntry.subjectIndex}`;
                 const userRecord = recordsMap.get(userRecordKey);
                 let finalStatus: AttendanceStatus;
 
@@ -160,7 +184,37 @@ export const attendanceService = {
                     isReplacement: false,
                     originalSubjectName: null,
                     isGloballyCancelled: isGloballyCancelled,
+                    isAdded: false,
                 });
+            }
+        }
+
+        const daysInWeek = getDaysInInterval(startDate, endDate);
+        for (const override of overrides) {
+            if (override.overrideType === OverrideType.ADDED && override.replacementSubjectName) {
+                const dateStr = formatDate(override.classDate);
+                const dayOfWeek = getISODayOfWeek(override.classDate);
+                
+                if (daysInWeek.some(d => formatDate(d) === dateStr)) {
+                    const userRecordKey = `${dateStr}_${override.replacementSubjectName}_${override.entryIndex}`;
+                    const userRecord = recordsMap.get(userRecordKey);
+                    
+                    finalViewEntries.push({
+                        date: dateStr,
+                        dayOfWeek: dayOfWeek,
+                        subjectName: override.replacementSubjectName,
+                        courseCode: override.replacementCourseCode,
+                        startTime: override.replacementStartTime,
+                        endTime: override.replacementEndTime,
+                        status: userRecord?.status ?? AttendanceStatus.MISSED,
+                        recordId: userRecord?.id,
+                        isReplacement: false,
+                        originalSubjectName: null,
+                        isGloballyCancelled: false,
+                        isAdded: true,
+                        subjectIndex: override.entryIndex,
+                    });
+                }
             }
         }
 
@@ -180,6 +234,7 @@ export const attendanceService = {
         await attendanceRepository.createOrUpdateClassOverride({
             streamId: input.streamId, classDate: classDateNorm,
             originalSubjectName: input.subjectName, originalStartTime: input.startTime || null,
+            entryIndex: input.entryIndex,
             overrideType: OverrideType.CANCELLED, adminUserId: adminUserId,
             replacementSubjectName: null, replacementCourseCode: null,
             replacementStartTime: null, replacementEndTime: null,
@@ -187,20 +242,33 @@ export const attendanceService = {
         return { message: `Class cancellation recorded for ${input.subjectName} on ${input.classDate}.`, updatedCount: 1 };
     },
 
-    async replaceClassGlobally(input: ReplaceClassInput, adminUserId: string): Promise<{ message: string; updatedCount: number }> {
+    async replaceClassGlobally(input: ReplaceClassInput, adminUserId: string): Promise<{ message: string; updatedCount: number; replacementSubjectIndex: number }> {
         await streamService.ensureAdminAccess(input.streamId, adminUserId);
         const classDateNorm = normalizeDate(input.classDate);
 
         await attendanceRepository.createOrUpdateClassOverride({
             streamId: input.streamId, classDate: classDateNorm,
-            originalSubjectName: input.originalSubjectName, 
+            originalSubjectName: input.originalSubjectName,
             originalStartTime: input.originalStartTime ?? null,
+            entryIndex: input.entryIndex,
             overrideType: OverrideType.REPLACED, adminUserId: adminUserId,
             replacementSubjectName: input.replacementSubjectName,
             replacementCourseCode: input.replacementCourseCode ?? null,
             replacementStartTime: input.replacementStartTime ?? null,
             replacementEndTime: input.replacementEndTime ?? null,
         });
+
+        const existingReplacementRecords = await prisma.attendanceRecord.findMany({
+            where: {
+                streamId: input.streamId,
+                classDate: classDateNorm,
+                subjectName: input.replacementSubjectName,
+            },
+            select: { subjectIndex: true }
+        });
+
+        const existingIndices = existingReplacementRecords.map(r => r.subjectIndex);
+        const nextReplacementIndex = existingIndices.length > 0 ? Math.max(...existingIndices) + 1 : 0;
 
         const userIds = await streamService.getStreamMemberUserIds(input.streamId);
         let createdCount = 0;
@@ -213,6 +281,10 @@ export const attendanceService = {
                          courseCode: input.replacementCourseCode ?? null,
                          classDate: classDateNorm,
                          status: AttendanceStatus.MISSED,
+                         subjectIndex: nextReplacementIndex,
+                         isReplacement: true,
+                         originalSubjectName: input.originalSubjectName,
+                         originalStartTime: input.originalStartTime,
                      }
                  });
                  createdCount++;
@@ -231,7 +303,64 @@ export const attendanceService = {
                 }
             }
         }
-        return { message: `Class replacement recorded. Initial records created/found for ${userIds.length} students.`, updatedCount: userIds.length };
+        return {
+            message: `Class replacement recorded. Initial records created/found for ${userIds.length} students.`,
+            updatedCount: userIds.length,
+            replacementSubjectIndex: nextReplacementIndex
+        };
+    },
+
+    async addSubjectGlobally(input: AddSubjectInput, adminUserId: string): Promise<{ message: string; updatedCount: number }> {
+        await streamService.ensureAdminAccess(input.streamId, adminUserId);
+        const classDateNorm = normalizeDate(input.classDate);
+
+        await attendanceRepository.createOrUpdateClassOverride({
+            streamId: input.streamId,
+            classDate: classDateNorm,
+            originalSubjectName: input.subjectName,
+            originalStartTime: input.startTime ?? null,
+            entryIndex: input.entryIndex,
+            overrideType: OverrideType.ADDED,
+            adminUserId: adminUserId,
+            replacementSubjectName: input.subjectName,
+            replacementCourseCode: input.courseCode ?? null,
+            replacementStartTime: input.startTime ?? null,
+            replacementEndTime: input.endTime ?? null,
+        });
+
+        const userIds = await streamService.getStreamMemberUserIds(input.streamId);
+        let createdCount = 0;
+        for (const userId of userIds) {
+            try {
+                await prisma.attendanceRecord.create({
+                    data: {
+                        userId,
+                        streamId: input.streamId,
+                        subjectName: input.subjectName,
+                        courseCode: input.courseCode ?? null,
+                        classDate: classDateNorm,
+                        status: AttendanceStatus.MISSED,
+                        subjectIndex: input.entryIndex,
+                        isReplacement: false,
+                    }
+                });
+                createdCount++;
+            } catch (e: any) {
+                if (e.code !== 'P2002') {
+                    console.error("Failed to create initial added subject record", {
+                        err: e,
+                        userId,
+                        input
+                    });
+                } else {
+                    console.warn("Added subject record already existed for user.", {
+                        userId,
+                        input
+                    });
+                }
+            }
+        }
+        return { message: `Added subject recorded. Initial records created/found for ${userIds.length} students.`, updatedCount: userIds.length };
     },
 
     async recordBulkAttendance(input: BulkAttendanceInput, userId: string): Promise<{ message: string, entriesCreated: number }> {
@@ -252,6 +381,10 @@ export const attendanceService = {
                 cancelledCounts[originalSubjectKey] = (cancelledCounts[originalSubjectKey] || 0) + 1;
             } else if (ov.overrideType === OverrideType.REPLACED) {
                 cancelledCounts[originalSubjectKey] = (cancelledCounts[originalSubjectKey] || 0) + 1;
+                if (ov.replacementSubjectName) {
+                     replacementCounts[ov.replacementSubjectName] = (replacementCounts[ov.replacementSubjectName] || 0) + 1;
+                }
+            } else if (ov.overrideType === OverrideType.ADDED) {
                 if (ov.replacementSubjectName) {
                      replacementCounts[ov.replacementSubjectName] = (replacementCounts[ov.replacementSubjectName] || 0) + 1;
                 }

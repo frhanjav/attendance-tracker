@@ -1,13 +1,13 @@
-import express, { Express, Request, Response, NextFunction } from 'express';
-import helmet from 'helmet';
-import cors from 'cors';
-import session from 'express-session';
-import passport from './config/passport';
 import cookieParser from 'cookie-parser';
+import cors from 'cors';
+import express, { Express, NextFunction, Request, Response } from 'express';
+import session from 'express-session';
+import helmet from 'helmet';
 import { config } from './config';
-import apiRouter from './routes';
-import { errorHandler } from './middleware/error.middleware';
+import passport from './config/passport';
 import { NotFoundError } from './core/errors';
+import { errorHandler } from './middleware/error.middleware';
+import apiRouter from './routes';
 
 // Install: npm install express-session @types/express-session cookie-parser @types/cookie-parser
 // Optional production session store: npm install connect-pg-simple
@@ -52,7 +52,7 @@ app.use(
 // --- Handle Uncaught Exceptions ---
 // Should be placed early, but after essential imports/setup
 process.on('uncaughtException', (err: Error) => {
-  console.error('UNCAUGHT EXCEPTION! 💥 Shutting down...');
+  console.error('UNCAUGHT EXCEPTION!  Shutting down...');
   console.error(err.name, err.message);
   console.error(err.stack);
   // In production, log the error to your logging service here
@@ -122,13 +122,13 @@ app.use(errorHandler);
 
 // --- Start Server ---
 const server = app.listen(config.port, () => {
-  console.log(`✅ Backend server running on port ${config.port} in ${config.nodeEnv} mode`);
+  console.log(` Backend server running on port ${config.port} in ${config.nodeEnv} mode`);
 });
 
 // --- Process Event Handlers ---
 // --- Handle Unhandled Rejections ---
 process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
-  console.error('UNHANDLED REJECTION! 💥 Shutting down...');
+  console.error('UNHANDLED REJECTION!  Shutting down...');
   console.error('Reason:', reason?.stack || reason); // Log the reason/stack
   // In production, log the error to your logging service here
   // Graceful shutdown:
@@ -141,9 +141,9 @@ process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
 
 // --- Handle SIGTERM (e.g., from Docker/Kubernetes) ---
 process.on('SIGTERM', () => {
-  console.log('👋 SIGTERM RECEIVED. Shutting down gracefully');
+  console.log(' SIGTERM RECEIVED. Shutting down gracefully');
   server.close(() => {
-    console.log('💥 Process terminated!');
+    console.log(' Process terminated!');
     // Prisma disconnect might be needed here if not handled elsewhere
     process.exit(0);
   });

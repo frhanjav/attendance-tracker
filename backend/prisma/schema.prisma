@@ -16,6 +16,7 @@ enum AttendanceStatus {
 enum OverrideType {
   CANCELLED
   REPLACED
+  ADDED
 }
 
 model User {
@@ -75,7 +76,7 @@ model ClassOverride {
   classDate           DateTime
   originalSubjectName String
   originalStartTime   String?
-
+  entryIndex          Int
   overrideType OverrideType
 
   replacementSubjectName String?
@@ -89,7 +90,7 @@ model ClassOverride {
   stream    Stream @relation(fields: [streamId], references: [id], onDelete: Cascade)
   adminUser User   @relation(fields: [adminUserId], references: [id])
 
-  @@unique([streamId, classDate, originalSubjectName])
+  @@unique([streamId, classDate, originalSubjectName, entryIndex])
   @@index([streamId, classDate])
   @@index([streamId, classDate, originalSubjectName], map: "override_stream_date_composite")
 }
@@ -140,11 +141,12 @@ model AttendanceRecord {
   originalCourseCode  String?
   originalStartTime   String?
   originalEndTime     String?
+  subjectIndex        Int     @default(0)
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   stream Stream @relation(fields: [streamId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, streamId, subjectName, classDate, isReplacement])
+  @@unique([userId, streamId, subjectName, classDate, subjectIndex, isReplacement])
   @@index([userId, streamId, classDate, status])
   @@index([isReplacement])
   @@index([streamId, classDate, userId], map: "attendance_stream_date_composite")

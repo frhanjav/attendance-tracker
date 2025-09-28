@@ -1,17 +1,17 @@
-import React, { useState, useMemo } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { CalendarOff, Loader2, Plus } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import TimetableViewer from '../components/TimetableViewer';
 import CreateTimetableModal from '../components/CreateTimetableModal';
+import TimetableViewer from '../components/TimetableViewer';
 import { Button } from '../components/ui/button';
-import { Plus, CalendarOff, Loader2 } from 'lucide-react';
-import { timetableService, SetEndDateInput, TimetableOutput, TimetableBasicInfo } from '../services/timetable.service';
-import { streamService, StreamDetailed } from '../services/stream.service';
-import { useAuth } from '../hooks/useAuth';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "../components/ui/dialog";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import { useAuth } from '../hooks/useAuth';
+import { StreamDetailed, streamService } from '../services/stream.service';
+import { SetEndDateInput, TimetableBasicInfo, TimetableOutput, timetableService } from '../services/timetable.service';
 
 import { format, parseISO } from 'date-fns';
 import toast from 'react-hot-toast';
@@ -55,11 +55,16 @@ const TimetablePage: React.FC = () => {
         mutationFn: (vars) => timetableService.setEndDate(vars.timetableId, vars.data),
         onSuccess: (updatedData) => {
             toast.success(`End date set for timetable "${updatedData.name}"`);
-            queryClient.invalidateQueries({ queryKey: ['activeTimetable', streamId] });
-            queryClient.invalidateQueries({ queryKey: ['timetableList', streamId] });
-            queryClient.invalidateQueries({ queryKey: ['weeklySchedule', streamId] });
-            queryClient.invalidateQueries({ queryKey: ['attendanceWeek', streamId] });
-            queryClient.invalidateQueries({ queryKey: ['streamAnalytics', streamId] });
+            
+            queryClient.invalidateQueries({ 
+                predicate: (query) => {
+                    const queryKey = query.queryKey;
+                    return Array.isArray(queryKey) && 
+                           queryKey.length >= 2 && 
+                           queryKey[1] === streamId &&
+                           ['activeTimetable', 'timetableList', 'weeklySchedule', 'attendanceWeek', 'weeklyAttendanceView', 'streamAnalytics'].includes(queryKey[0]);
+                }
+            });
             handleCloseEndModal();
         },
         onError: (err: Error) => toast.error(`Error: ${err.message}`),
@@ -81,7 +86,7 @@ const TimetablePage: React.FC = () => {
         setEndDateMutation.mutate({ timetableId: timetableToEnd.id, data: { validUntil: endDate } });
     };
 
-    const isLoading = isLoadingStream;    
+    const isLoading = isLoadingStream;
 
     return (
         <div className="space-y-6">
@@ -138,7 +143,6 @@ const TimetablePage: React.FC = () => {
                     </CardContent>
                 </Card>
             )}
-
 
              <Dialog open={isEndModalOpen} onOpenChange={(open) => !open && handleCloseEndModal()}>
                  <DialogContent>

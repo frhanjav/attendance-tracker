@@ -1,19 +1,20 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import { useMutation, UseMutationResult, useQuery, useQueryClient } from '@tanstack/react-query';
+import { addDays, differenceInWeeks, eachDayOfInterval, endOfWeek, format, isSameDay, parseISO, startOfWeek } from 'date-fns';
+import { ArrowLeft, ArrowRight, Check, Loader2, Repeat, X } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient, UseMutationResult } from '@tanstack/react-query';
-import {
-    attendanceService,
-    WeeklyAttendanceViewEntry,
-    AttendanceStatus,
-    MarkAttendanceInput,
-    AttendanceRecordOutput
-} from '../services/attendance.service';
-import { streamService, StreamDetailed } from '../services/stream.service';
-import { format, addDays, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, differenceInWeeks, parseISO } from 'date-fns';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
-import { Check, X, ArrowLeft, ArrowRight, Loader2, Repeat } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { useOptimisticAttendanceUpdates } from '../hooks/useOptimisticAttendanceUpdates';
+import {
+    AttendanceRecordOutput,
+    attendanceService,
+    AttendanceStatus,
+    MarkAttendanceInput,
+    WeeklyAttendanceViewEntry
+} from '../services/attendance.service';
+import { StreamDetailed, streamService } from '../services/stream.service';
+import { generateEntryKey } from '../utils/simpleIndexing';
 
 interface AttendanceButtonProps {
     viewEntry: WeeklyAttendanceViewEntry | null;
@@ -22,16 +23,21 @@ interface AttendanceButtonProps {
     mutation: UseMutationResult<AttendanceRecordOutput, Error, MarkAttendanceInput>;
     setMutatingEntryKey: React.Dispatch<React.SetStateAction<string | null>>;
     mutatingEntryKey: string | null;
+    subjectIndex: number;
+    isLoading?: boolean;
 }
 
 const AttendanceButton: React.FC<AttendanceButtonProps> = ({
-    viewEntry, streamId, currentStatus, mutation, setMutatingEntryKey, mutatingEntryKey
+    viewEntry, streamId, currentStatus, mutation, setMutatingEntryKey, mutatingEntryKey, subjectIndex, isLoading = false
 }) => {
     if (!viewEntry || currentStatus === AttendanceStatus.CANCELLED) {
-         return <span className="text-xs text-red-600 italic mt-2 block h-7">Cancelled</span>;
+        if (viewEntry?.isGloballyCancelled && viewEntry?.isReplacement) {
+            return <span className="text-xs text-orange-600 italic mt-2 block h-7">Replaced</span>;
+        }
+        return <span className="text-xs text-red-600 italic mt-2 block h-7">Cancelled</span>;
     }
 
-    const entryKey = viewEntry.recordId || `${viewEntry.date}_${viewEntry.subjectName}_${viewEntry.isReplacement}`;
+    const entryKey = generateEntryKey(viewEntry, subjectIndex);
     const isMutatingThis = mutatingEntryKey === entryKey;
     const isAttended = viewEntry.status === AttendanceStatus.OCCURRED;
 
@@ -44,18 +50,19 @@ const AttendanceButton: React.FC<AttendanceButtonProps> = ({
             courseCode: viewEntry.courseCode,
             classDate: viewEntry.date,
             status: newStatus,
+            subjectIndex: subjectIndex,
         });
     };
 
     return (
         <Button
             onClick={handleToggle}
-            disabled={isMutatingThis}
+            disabled={isMutatingThis || isLoading}
             variant={isAttended ? "default" : "outline"}
             size="sm"
             className={`w-full mt-1 text-xs h-7 ${isAttended ? 'bg-green-600 hover:bg-green-700 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
         >
-            {isMutatingThis ? <Loader2 className="h-3 w-3 animate-spin"/> : (isAttended ? <> <Check size={14} className="mr-1"/> Attended</> : 'Mark Attended')}
+            {(isMutatingThis || isLoading) ? <Loader2 className="h-3 w-3 animate-spin"/> : (isAttended ? <> <Check size={14} className="mr-1"/> Attended</> : 'Mark Attended')}
         </Button>
     );
 };
@@ -88,28 +95,44 @@ const AttendancePage: React.FC = () => {
      const currentWeekEnd = useMemo(() => currentWeekStart ? endOfWeek(currentWeekStart, { weekStartsOn: 1 }) : null, [currentWeekStart]);
  
      const queryKey = ['weeklyAttendanceView', streamId, currentWeekStart ? format(currentWeekStart, 'yyyy-MM-dd') : ''];
-     const { data: weekAttendance = [], isLoading: isLoadingWeek, error } = useQuery<WeeklyAttendanceViewEntry[], Error>({
+     const { data: weekAttendance = [], isLoading: isLoadingWeek, error, dataUpdatedAt, isFetching } = useQuery<WeeklyAttendanceViewEntry[], Error>({
          queryKey: queryKey,
          queryFn: async () => {
              if (!streamId || !currentWeekStart || !currentWeekEnd) return [];
              const startDateStr = format(currentWeekStart, 'yyyy-MM-dd');
              const endDateStr = format(currentWeekEnd, 'yyyy-MM-dd');
-             return await attendanceService.getWeeklyAttendanceView(streamId, startDateStr, endDateStr);
+
+             const result = await attendanceService.getWeeklyAttendanceView(streamId, startDateStr, endDateStr);
+
+             return result;
          },
-         enabled: !!streamId && !!currentWeekStart && !!currentWeekEnd && !isLoadingStream,
-         staleTime: 1000 * 60 * 5,
-         refetchOnWindowFocus: false,
+         enabled: !!streamId && !!currentWeekStart && !!currentWeekEnd && !isLoadingStream
+     });
+
+     const optimisticUpdates = useOptimisticAttendanceUpdates({
+         queryClient,
+         queryKey
      });
 
      const markAttendanceMutation = useMutation<AttendanceRecordOutput, Error, MarkAttendanceInput>({
         mutationFn: attendanceService.markAttendance,
-        onSuccess: (data, variables) => {
-            toast.success(`Attendance updated for ${variables.subjectName}`);
-            queryClient.invalidateQueries({ queryKey: queryKey });
-            queryClient.invalidateQueries({ queryKey: ['streamAnalytics', streamId] });
-            queryClient.invalidateQueries({ queryKey: ['subjectStats', streamId] });
+        onMutate: async (variables) => {
+            console.log(' AttendancePage mutation with variables:', variables);
+
+            return await optimisticUpdates.optimisticallyUpdateAttendance({
+                date: variables.classDate,
+                subjectName: variables.subjectName,
+                courseCode: variables.courseCode,
+                newStatus: variables.status,
+                subjectIndex: variables.subjectIndex
+            });
         },
-        onError: (error) => { toast.error(`Update failed: ${error.message}`); },
+        onSuccess: (_data, variables) => {
+            optimisticUpdates.handleOptimisticSuccess(`Attendance updated for ${variables.subjectName}`);
+        },
+        onError: (error, _variables, previousData: any) => { 
+            optimisticUpdates.handleOptimisticError(error, previousData);
+        },
         onSettled: () => { setMutatingEntryKey(null); }
     });
 
@@ -209,37 +232,47 @@ const AttendancePage: React.FC = () => {
                             </CardHeader>
                             <CardContent className="p-4 space-y-3 flex-grow">
                                 {groupedData[dayOfWeek].entries.length === 0 && <p className="text-xs text-gray-400 italic text-center py-2">No classes</p>}
-                                {groupedData[dayOfWeek].entries.map((entry, index) => (
-                                    <div key={`${entry.subjectName}-${entry.startTime || index}-${entry.isReplacement}`} className="border-b border-gray-100 pb-3 last:border-b-0 last:pb-0">
-                                        <div className="flex justify-between items-start mb-1">
-                                            <div>
-                                                {entry.isReplacement && (
-                                                    <span className="text-xs text-blue-600 font-medium flex items-center">
-                                                        <Repeat size={12} className="mr-1"/> Replacement
-                                                    </span>
-                                                )}
-                                                <p className={`text-sm font-medium ${entry.status === AttendanceStatus.CANCELLED ? 'line-through text-gray-500' : 'text-gray-900'}`}>
-                                                    {entry.subjectName}
+                                {groupedData[dayOfWeek].entries.map((entry, localIndex) => {
+                                    if (entry.subjectIndex === undefined) {
+                                        console.error(' Missing subjectIndex for entry:', entry);
+                                    }
+                                    const subjectIndex = entry.subjectIndex ?? 0;
+                                    const entryKey = generateEntryKey(entry, localIndex);
+                                    
+                                    return (
+                                        <div key={entryKey} className="border-b border-gray-100 pb-3 last:border-b-0 last:pb-0">
+                                            <div className="flex justify-between items-start mb-1">
+                                                <div>
+                                                    {entry.isReplacement && (
+                                                        <span className="text-xs text-blue-600 font-medium flex items-center">
+                                                            <Repeat size={12} className="mr-1"/> Replacement
+                                                        </span>
+                                                    )}
+                                                    <p className={`text-sm font-medium ${entry.status === AttendanceStatus.CANCELLED ? 'line-through text-gray-500' : 'text-gray-900'}`}>
+                                                        {entry.subjectName}
+                                                    </p>
+                                                    {entry.courseCode && <p className="text-xs text-gray-500">{entry.courseCode}</p>}
+                                                    {entry.isReplacement && entry.originalSubjectName && (
+                                                        <p className="text-xs text-gray-500 italic">(Replaced: {entry.originalSubjectName})</p>
+                                                    )}
+                                                </div>
+                                                <p className={`text-xs font-mono whitespace-nowrap pl-1 ${entry.status === AttendanceStatus.CANCELLED ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                    {entry.startTime || '--:--'} - {entry.endTime || '--:--'}
                                                 </p>
-                                                {entry.courseCode && <p className="text-xs text-gray-500">{entry.courseCode}</p>}
-                                                {entry.isReplacement && entry.originalSubjectName && (
-                                                    <p className="text-xs text-gray-500 italic">(Replaced: {entry.originalSubjectName})</p>
-                                                )}
                                             </div>
-                                            <p className={`text-xs font-mono whitespace-nowrap pl-1 ${entry.status === AttendanceStatus.CANCELLED ? 'text-gray-400' : 'text-gray-500'}`}>
-                                                {entry.startTime || '--:--'} - {entry.endTime || '--:--'}
-                                            </p>
+                                            <AttendanceButton
+                                                viewEntry={entry}
+                                                streamId={streamId!}
+                                                currentStatus={entry.status}
+                                                mutation={markAttendanceMutation}
+                                                setMutatingEntryKey={setMutatingEntryKey}
+                                                mutatingEntryKey={mutatingEntryKey}
+                                                subjectIndex={subjectIndex}
+                                                isLoading={isLoadingWeek}
+                                            />
                                         </div>
-                                        <AttendanceButton
-                                            viewEntry={entry}
-                                            streamId={streamId!}
-                                            currentStatus={entry.status}
-                                            mutation={markAttendanceMutation}
-                                            setMutatingEntryKey={setMutatingEntryKey}
-                                            mutatingEntryKey={mutatingEntryKey}
-                                        />
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </CardContent>
                         </Card>
                     ))}
@@ -252,7 +285,9 @@ const AttendancePage: React.FC = () => {
                      <span className="inline-flex items-center"><Check className="w-4 h-4 mr-1 text-green-600"/> Attended</span>
                      <span className="inline-flex items-center"><span className="w-4 h-4 mr-1 text-gray-400 flex items-center justify-center">-</span> Missed (Default)</span>
                      <span className="inline-flex items-center"><X className="w-4 h-4 mr-1 text-red-600"/> Cancelled (by Admin)</span>
+                     <span className="inline-flex items-center"><span className="w-4 h-4 mr-1 text-orange-600 flex items-center justify-center font-bold">R</span> Replaced (by Admin)</span>
                      <span className="inline-flex items-center"><Repeat size={12} className="w-4 h-4 mr-1 text-blue-600"/> Replacement Class</span>
+                     <span className="inline-flex items-center"><span className="w-4 h-4 mr-1 text-blue-600 flex items-center justify-center font-bold">+</span> Added Class</span>
                  </div>
             </div>
 

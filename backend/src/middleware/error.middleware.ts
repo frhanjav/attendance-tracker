@@ -1,9 +1,9 @@
-import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
-import { AppError, BadRequestError, NotFoundError, UnauthorizedError } from '../core/errors';
-import { config } from '../config';
-import { ZodError } from 'zod';
 import { Prisma } from '@prisma/client';
+import { NextFunction, Request, Response } from 'express';
+import jwt from 'jsonwebtoken';
+import { ZodError } from 'zod';
+import { config } from '../config';
+import { AppError, BadRequestError, NotFoundError, UnauthorizedError } from '../core/errors';
 
 const handleZodError = (err: ZodError): AppError => {
   const errors = err.errors.map(el => `${el.path.join('.')}: ${el.message}`).join('. ');
@@ -36,7 +36,7 @@ const handleJWTError = (err: Error): AppError => {
 }
 
 export const errorHandler = (err: Error, req: Request, res: Response, next: NextFunction) => {
-  console.error('ERROR 💥:', err);
+  console.error('ERROR :', err);
 
   let operationalError: AppError;
 

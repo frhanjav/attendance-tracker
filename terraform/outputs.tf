@@ -33,9 +33,9 @@ output "deployment_instructions" {
   description = "Instructions for deploying the application"
   value       = <<-EOT
     
-    🚀 Infrastructure Created Successfully!
+     Infrastructure Created Successfully!
     
-    📋 Next Steps:
+     Next Steps:
     
     1. Add database URL to your GitHub Actions secrets:
        - STAGING_DATABASE_URL (for staging environment)
@@ -52,7 +52,7 @@ output "deployment_instructions" {
     3. Manual deployment (if needed):
        docker-compose -f docker-compose.staging.yml pull && docker-compose -f docker-compose.staging.yml up -d
     
-    📊 Resources Created:
+     Resources Created:
     - Docker Registry: ${google_artifact_registry_repository.docker_repo.repository_id}
     - VM Service Account: ${google_service_account.vm_service_account.email}
     ${var.create_vm_instance ? "- VM Instance: ${google_compute_instance.app_server[0].name}" : ""}

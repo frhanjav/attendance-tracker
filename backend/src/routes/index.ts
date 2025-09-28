@@ -1,31 +1,26 @@
-import { Router, Request, Response, NextFunction } from 'express';
-import passport from '../config/passport';
-import jwt from 'jsonwebtoken';
-import { config } from '../config';
 import { User } from '@prisma/client';
-import { userController } from '../domains/user/user.controller';
-import { streamController } from '../domains/stream/stream.controller';
-import { timetableController } from '../domains/timetable/timetable.controller';
-import { attendanceController } from '../domains/attendance/attendance.controller';
-import { analyticsController } from '../domains/analytics/analytics.controller';
-import { validateRequest } from '../middleware/validation.middleware';
-import { protect } from '../middleware/auth.middleware';
+import { NextFunction, Request, Response, Router } from 'express';
+import jwt from 'jsonwebtoken';
 import { z } from 'zod';
-import { SetEndDateSchema } from '../domains/timetable/timetable.dto';
-import { CreateStreamSchema, JoinStreamSchema } from '../domains/stream/stream.dto';
+import { config } from '../config';
+import passport from '../config/passport';
+import { analyticsController } from '../domains/analytics/analytics.controller';
+import { AttendanceCalculatorInputSchema } from '../domains/analytics/analytics.dto';
+import { attendanceController } from '../domains/attendance/attendance.controller';
 import {
-    TimetableBodySchema,
-    TimetableStreamParamsSchema,
-    TimetableIdParamsSchema,
-    TimetableActiveQuerySchema,
-} from '../domains/timetable/timetable.dto';
-import {
-    MarkAttendanceSchema,
+    AddSubjectSchema,
     BulkAttendanceSchema,
     CancelClassSchema,
+    MarkAttendanceSchema,
     ReplaceClassSchema,
 } from '../domains/attendance/attendance.dto';
-import { AttendanceCalculatorInputSchema } from '../domains/analytics/analytics.dto';
+import { streamController } from '../domains/stream/stream.controller';
+import { CreateStreamSchema, JoinStreamSchema } from '../domains/stream/stream.dto';
+import { timetableController } from '../domains/timetable/timetable.controller';
+import { SetEndDateSchema, TimetableActiveQuerySchema, TimetableBodySchema, TimetableIdParamsSchema, TimetableStreamParamsSchema } from '../domains/timetable/timetable.dto';
+import { userController } from '../domains/user/user.controller';
+import { protect } from '../middleware/auth.middleware';
+import { validateRequest } from '../middleware/validation.middleware';
 
 const router = Router();
 
@@ -192,6 +187,9 @@ router.post(
 
 // Replace Class Route (Admin)
 router.post('/attendance/replace', validateRequest(ReplaceClassSchema), attendanceController.handleReplaceClassGlobally);
+
+// Add Subject Route (Admin)
+router.post('/attendance/add', validateRequest(AddSubjectSchema), attendanceController.handleAddSubjectGlobally);
 
 // Get Weekly Attendance View (Student)
 router.get(

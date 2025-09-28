@@ -30,7 +30,6 @@ const StreamPage: React.FC = () => {
         onSuccess: (data) => {
             toast.success(data.message);
             queryClient.invalidateQueries({ queryKey: ['myStreams'] });
-            queryClient.invalidateQueries({ queryKey: ['myStreamsDashboard'] });
             navigate('/dashboard');
         },
         onError: (err: Error) => toast.error(`Leave failed: ${err.message}`),
@@ -42,7 +41,6 @@ const StreamPage: React.FC = () => {
         onSuccess: (updatedStreamData) => {
             toast.success(`Stream "${updatedStreamData.name}" archived.`);
             queryClient.invalidateQueries({ queryKey: ['myStreams'] });
-            queryClient.invalidateQueries({ queryKey: ['myStreamsDashboard'] });
             queryClient.invalidateQueries({ queryKey: ['stream', streamId] });
         },
         onError: (err: Error) => toast.error(`Archive failed: ${err.message}`),
@@ -54,7 +52,6 @@ const StreamPage: React.FC = () => {
         onSuccess: (updatedStreamData) => {
             toast.success(`Stream "${updatedStreamData.name}" unarchived.`);
             queryClient.invalidateQueries({ queryKey: ['myStreams'] });
-            queryClient.invalidateQueries({ queryKey: ['myStreamsDashboard'] });
             queryClient.invalidateQueries({ queryKey: ['stream', streamId] });
         },
         onError: (err: Error) => toast.error(`Unarchive failed: ${err.message}`),
