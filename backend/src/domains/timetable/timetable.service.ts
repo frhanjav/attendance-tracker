@@ -1,22 +1,22 @@
-import { timetableRepository } from './timetable.repository';
+import { Timetable, TimetableEntry } from '@prisma/client';
+import { isAfter, isBefore, isEqual } from 'date-fns';
+import { BadRequestError, NotFoundError } from '../../core/errors';
+import {
+  formatDate,
+  getDaysInInterval,
+  getISODayOfWeek,
+  normalizeDate,
+} from '../../core/utils';
+import prisma from '../../infrastructure/prisma';
 import { streamService } from '../stream/stream.service';
 import {
-    CreateTimetableFrontendInput,
-    TimetableOutput,
-    TimetableEntryOutput,
-    TimetableBasicInfo,
+  CreateTimetableFrontendInput,
+  SetEndDateInput,
+  TimetableBasicInfo,
+  TimetableEntryOutput,
+  TimetableOutput,
 } from './timetable.dto';
-import { NotFoundError, BadRequestError } from '../../core/errors';
-import { Timetable, TimetableEntry } from '@prisma/client';
-import {
-    formatDate,
-    normalizeDate,
-    getISODayOfWeek,
-    getDaysInInterval,
-} from '../../core/utils';
-import { isBefore, isAfter, isEqual } from 'date-fns';
-import prisma from '../../infrastructure/prisma';
-import { SetEndDateInput } from './timetable.dto';
+import { timetableRepository } from './timetable.repository';
 
 type FlatTimetableEntryInput = Omit<TimetableEntry, 'id' | 'timetableId'>;
 
@@ -89,7 +89,7 @@ export const timetableService = {
         const latestTimetable = await prisma.timetable.findFirst({
             where: { streamId: streamId },
             orderBy: { validFrom: 'desc' },
-            select: { validFrom: true },
+            select: { id: true, validFrom: true, validUntil: true },
         });
 
         if (latestTimetable && !isAfter(validFrom, latestTimetable.validFrom)) {
@@ -101,6 +101,16 @@ export const timetableService = {
         const flatEntries = transformSubjectsToEntries(input.subjects);
         if (flatEntries.length === 0) {
             throw new BadRequestError('Timetable must have at least one schedule entry.');
+        }
+
+        if (latestTimetable && latestTimetable.validUntil === null) {
+            const previousTimetableEndDate = new Date(validFrom);
+            previousTimetableEndDate.setDate(previousTimetableEndDate.getDate() - 1);
+            
+            await timetableRepository.setEndDate(
+                latestTimetable.id,
+                normalizeDate(previousTimetableEndDate)
+            );
         }
 
         const newTimetable = await timetableRepository.create(
@@ -154,10 +164,14 @@ export const timetableService = {
 
         const days = getDaysInInterval(startDate, endDate);
         for (const day of days) {
-            const activeTimetable = relevantTimetables.find((tt: Timetable & { entries: TimetableEntry[] }) => 
+            const validTimetablesForDay = relevantTimetables.filter((tt: Timetable & { entries: TimetableEntry[] }) => 
                 tt.validFrom <= day && 
                 (tt.validUntil === null || tt.validUntil >= day)
             );
+            
+            const activeTimetable = validTimetablesForDay.sort((a, b) => 
+                b.validFrom.getTime() - a.validFrom.getTime()
+            )[0];
 
             if (activeTimetable) {
                 const dayOfWeek = getISODayOfWeek(day);
