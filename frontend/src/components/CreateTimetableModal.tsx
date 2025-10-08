@@ -275,9 +275,6 @@ const CreateTimetableModal: React.FC<CreateTimetableModalProps> = ({ isOpen, onC
                             </SelectContent>
                         </Select>
                     </div>
-                    <Button type="button" variant="outline" size="sm" disabled={!selectedImportId || isFetchingImportDetails} className="h-9 w-9 p-0">
-                        {isFetchingImportDetails ? ( <Loader2 className="h-4 w-4 animate-spin" /> ) : ( <Import size={16} /> )}
-                    </Button>
                 </div>
 
                 {/* Form Section */}
