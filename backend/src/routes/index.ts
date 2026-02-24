@@ -65,7 +65,7 @@ router.get('/auth/google/callback', (req, res, next) => {
                 httpOnly: true,
                 secure: config.nodeEnv === 'production',
                 maxAge: config.jwtExpiresInSeconds * 1000,
-                sameSite: config.nodeEnv === 'production' ? 'lax' : undefined,
+                sameSite: config.nodeEnv === 'production' ? 'none' : 'lax',
                 path: '/',
             });
             res.redirect(`${config.frontendUrl}/dashboard`);
@@ -82,7 +82,7 @@ router.post('/auth/logout', (req: Request, res: Response, next: NextFunction) =>
             httpOnly: true,
             expires: new Date(0),
             secure: config.nodeEnv === 'production',
-            sameSite: config.nodeEnv === 'production' ? 'lax' : undefined,
+            sameSite: config.nodeEnv === 'production' ? 'none' : 'lax',
             path: '/',
         });
         res.status(200).json({ status: 'success', message: 'Logged out successfully' });

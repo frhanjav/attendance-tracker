@@ -83,7 +83,7 @@ app.use(session({
         secure: config.nodeEnv === 'production', // Use secure cookies in production (HTTPS)
         httpOnly: true, // Prevent client-side JS access
         maxAge: 1000 * 60 * 60, // Example: 1 hour for the OAuth flow session cookie
-        sameSite: config.nodeEnv === 'production' ? 'lax' : undefined, // Lax for production, allow default in dev (might be needed for localhost)
+        sameSite: config.nodeEnv === 'production' ? 'none' : 'lax',
     },
     // TODO: Configure a production-ready session store (e.g., connect-pg-simple)
     // store: new PgSessionStore({ pool: pgPool, ... }),
